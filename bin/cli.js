@@ -10,6 +10,7 @@ const readline = require('readline');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 
 const VOICEBRIDGE_PORT = 57890;
@@ -318,8 +319,101 @@ async function processMessage(msg) {
   return null;
 }
 
+function injectMcpConfig(filePath, mcpKey = 'mcpServers') {
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    let config = {};
+    if (fs.existsSync(filePath)) {
+      try {
+        config = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      } catch {
+        config = {};
+      }
+    }
+
+    if (!config[mcpKey]) {
+      config[mcpKey] = {};
+    }
+
+    config[mcpKey].voicebridge = {
+      command: 'npx',
+      args: ['-y', '@webskr/voicebridge']
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function runSetup() {
+  console.log('\n======================================================');
+  console.log('   🎙️   VoiceBridge MCP Automatic Installer (@webskr)   ');
+  console.log('======================================================\n');
+
+  const home = os.homedir();
+  const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+
+  const targets = [
+    {
+      name: 'Google Antigravity IDE',
+      path: path.join(home, '.gemini', 'config', 'mcp_config.json'),
+      key: 'mcpServers'
+    },
+    {
+      name: 'Cursor IDE',
+      path: path.join(home, '.cursor', 'mcp.json'),
+      key: 'mcpServers'
+    },
+    {
+      name: 'Claude Desktop',
+      path: path.join(appData, 'Claude', 'claude_desktop_config.json'),
+      key: 'mcpServers'
+    },
+    {
+      name: 'VS Code (Cline / Roo Code)',
+      path: path.join(appData, 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'settings', 'cline_mcp_settings.json'),
+      key: 'mcpServers'
+    },
+    {
+      name: 'Current Workspace',
+      path: path.join(process.cwd(), 'mcp_config.json'),
+      key: 'mcpServers'
+    }
+  ];
+
+  let successCount = 0;
+  for (const target of targets) {
+    const parentDir = path.dirname(target.path);
+    if (fs.existsSync(parentDir) || target.name === 'Current Workspace' || target.name.includes('Antigravity')) {
+      const ok = injectMcpConfig(target.path, target.key);
+      if (ok) {
+        console.log(`  ✔  ${target.name.padEnd(26)} -> Configured (${path.basename(target.path)})`);
+        successCount++;
+      }
+    }
+  }
+
+  console.log('\n------------------------------------------------------');
+  console.log(`✨ Successfully installed VoiceBridge into ${successCount} configuration(s)!`);
+  console.log('📱 Phone URL : http://<YOUR_PC_IP>:57890');
+  console.log('🤖 MCP Server: npx -y @webskr/voicebridge');
+  console.log('======================================================\n');
+  process.exit(0);
+}
+
 async function main() {
-  log('Starting VoiceBridge NPX MCP Server...');
+  const args = process.argv.slice(2);
+  if (args.includes('setup') || args.includes('--setup') || args.includes('install')) {
+    return runSetup();
+  }
+
+  log('Starting VoiceBridge NPX MCP Server (@webskr/voicebridge)...');
   await ensureBackendRunning();
 
   const rl = readline.createInterface({

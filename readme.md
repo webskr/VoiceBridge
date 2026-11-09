@@ -4,20 +4,30 @@
 
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%202024--11--05%20%7C%202025--03--26-purple.svg)](https://modelcontextprotocol.io)
 [![Streamable HTTP](https://img.shields.io/badge/MCP%20URL-http%3A%2F%2F127.0.0.1%3A57890%2Fmcp-blue.svg)](http://127.0.0.1:57890/mcp)
-[![NPX Package](https://img.shields.io/badge/NPX-npx%20--y%20voicebridge--mcp-crimson.svg)](https://npmjs.com)
+[![NPX Package](https://img.shields.io/badge/NPX-npx%20--y%20%40webskr%2Fvoicebridge-crimson.svg)](https://npmjs.com/package/@webskr/voicebridge)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6?style=flat&logo=windows)](https://github.com)
 [![Local Network](https://img.shields.io/badge/Network-100%25%20Local%20Wi--Fi-green.svg)](https://github.com)
 [![Bilingual](https://img.shields.io/badge/Voice-Hindi%20%7C%20English%20Unicode-orange.svg)](https://github.com)
 
 ---
 
-## ⚡ MCP Installation & Connection URLs
+## ⚡ 1-Click Automatic Setup (Recommended)
 
-You can connect VoiceBridge to any AI coding assistant using either **Direct MCP Streamable HTTP URL** or the **Zero-Config NPX Runner**:
+Just run this single command in your terminal to automatically detect and configure **Google Antigravity, Cursor, Claude Desktop, and VS Code**:
 
-### Option 1: Direct MCP Streamable HTTP URL (Recommended)
-Paste this URL directly into your IDE's MCP configuration:
+```bash
+npx -y @webskr/voicebridge setup
+```
 
+That's it! It automatically detects your installed IDEs and adds the MCP server configuration for you without touching any JSON files.
+
+---
+
+## 🔌 Manual MCP Configuration (URL & NPX)
+
+If you prefer to configure manually, choose either **Direct HTTP URL** or **NPX**:
+
+### Option 1: Direct MCP Streamable HTTP URL
 ```json
 {
   "mcpServers": {
@@ -28,15 +38,13 @@ Paste this URL directly into your IDE's MCP configuration:
 }
 ```
 
-### Option 2: Zero-Config NPX Command (Auto-Booting)
-Runs anywhere via Node.js / npx, automatically launching the background engine if not already running:
-
+### Option 2: NPX Command
 ```json
 {
   "mcpServers": {
     "voicebridge": {
       "command": "npx",
-      "args": ["-y", "voicebridge-mcp"]
+      "args": ["-y", "@webskr/voicebridge"]
     }
   }
 }

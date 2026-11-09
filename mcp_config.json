@@ -4,9 +4,8 @@
       "command": "npx",
       "args": [
         "-y",
-        "voicebridge-mcp"
+        "@webskr/voicebridge"
       ]
     }
   }
 }
-

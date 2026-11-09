@@ -1,10 +1,14 @@
 {
-  "name": "voicebridge-mcp",
+  "name": "@webskr/voicebridge",
   "version": "1.1.0",
   "description": "VoiceBridge MCP Server: Stream phone voice dictation and 3000+ line clipboard into AI IDEs",
   "main": "bin/cli.js",
   "bin": {
+    "voicebridge": "./bin/cli.js",
     "voicebridge-mcp": "./bin/cli.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "keywords": [
     "mcp",
@@ -13,12 +17,14 @@
     "antigravity",
     "cursor",
     "speech-to-text",
-    "voice-typing"
+    "voice-typing",
+    "gboard"
   ],
-  "author": "VoiceBridge Team",
+  "author": "webskr",
   "license": "MIT",
   "scripts": {
     "start": "node bin/cli.js",
+    "setup": "node bin/cli.js setup",
     "dev": "npm --prefix web run dev",
     "build": "npm --prefix web run build"
   }
