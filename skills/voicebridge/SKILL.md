@@ -25,3 +25,4 @@ VoiceBridge connects your mobile phone to your AI coding IDE (Antigravity, Curso
 
 3. **Check Large Clipboard Transfers**:
    - If the user sent code or clipboard text from their phone, call `voicebridge_get_clipboard_transfers` to retrieve the content.
+

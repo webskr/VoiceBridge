@@ -1,13 +1,9 @@
 {
   "mcpServers": {
     "voicebridge": {
-      "command": "cmd.exe",
+      "command": "node",
       "args": [
-        "/d",
-        "/c",
-        "npx",
-        "-y",
-        "@webskr/voicebridge"
+        "d:/app/hackthon/bin/cli.js"
       ]
     }
   }
