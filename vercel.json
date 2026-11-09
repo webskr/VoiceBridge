@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd react-website && npm install && npm run build",
-  "outputDirectory": "react-website/dist",
+  "buildCommand": "npm --prefix web run build",
+  "outputDirectory": "web/dist",
   "rewrites": [
     {
       "source": "/(.*)",
@@ -8,3 +8,4 @@
     }
   ]
 }
+

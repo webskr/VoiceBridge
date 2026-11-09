@@ -1,0 +1,4 @@
+aiohttp>=3.9.0
+qrcode[pil]>=7.4.2
+colorama>=0.4.6
+
