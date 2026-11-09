@@ -66,6 +66,10 @@ class VoiceBridgeServer:
         self.app.router.add_get('/api/startup', self.handle_get_startup)
         self.app.router.add_post('/api/startup', self.handle_set_startup)
 
+        # MCP Streamable HTTP Endpoint
+        self.app.router.add_post('/mcp', self.handle_mcp_http)
+        self.app.router.add_get('/mcp', self.handle_mcp_http_get)
+
         # WebSocket
         self.app.router.add_get('/ws', self.handle_websocket)
         
@@ -182,6 +186,151 @@ class VoiceBridgeServer:
             return web.json_response({"success": False, "error": "No text provided"}, status=400)
         except Exception as e:
             return web.json_response({"success": False, "error": str(e)}, status=500)
+
+    async def handle_mcp_http(self, request):
+        try:
+            msg = await request.json()
+            method = msg.get("method")
+            req_id = msg.get("id")
+
+            if method == "initialize":
+                resp = {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {
+                            "name": "voicebridge-mcp",
+                            "version": "1.1.0"
+                        }
+                    }
+                }
+                return web.json_response(resp)
+
+            elif method == "notifications/initialized":
+                return web.Response(status=204)
+
+            elif method == "ping":
+                return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {}})
+
+            elif method == "tools/list":
+                tools = [
+                    {
+                        "name": "voicebridge_status",
+                        "description": "Check VoiceBridge connection status, active mobile pairing, PIN, and local IP.",
+                        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}
+                    },
+                    {
+                        "name": "voicebridge_get_live_voice",
+                        "description": "Get current live text dictated from phone voice typing (Gboard microphone).",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "reset_after_read": {"type": "boolean", "description": "Clear voice buffer after read."}
+                            },
+                            "additionalProperties": False
+                        }
+                    },
+                    {
+                        "name": "voicebridge_get_clipboard_transfers",
+                        "description": "List clipboard transfers or fetch full content of a 3000+ line transfer.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "transfer_id": {"type": "string", "description": "Optional transfer ID."}
+                            },
+                            "additionalProperties": False
+                        }
+                    },
+                    {
+                        "name": "voicebridge_type_text",
+                        "description": "Type text directly into active Windows cursor using SendInput.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {"text": {"type": "string"}},
+                            "required": ["text"],
+                            "additionalProperties": False
+                        }
+                    },
+                    {
+                        "name": "voicebridge_set_clipboard",
+                        "description": "Copy text to Windows clipboard with optional Ctrl+V auto-paste.",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "auto_paste": {"type": "boolean"}
+                            },
+                            "required": ["text"],
+                            "additionalProperties": False
+                        }
+                    }
+                ]
+                return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {"tools": tools}})
+
+            elif method == "tools/call":
+                params = msg.get("params", {})
+                name = params.get("name")
+                arguments = params.get("arguments", {})
+
+                if name == "voicebridge_status":
+                    status_data = {
+                        "service": "VoiceBridge Windows Agent",
+                        "version": "1.1.0",
+                        "host": self.host,
+                        "port": self.port,
+                        "pin": self.security.active_pin,
+                        "active_mobile": self.mobile_ws is not None and not self.mobile_ws.closed,
+                        "canonical_length": len(self.sync_engine.canonical_text)
+                    }
+                    content = [{"type": "text", "text": json.dumps(status_data, indent=2)}]
+                    return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {"content": content, "isError": False}})
+
+                elif name == "voicebridge_get_live_voice":
+                    text = self.sync_engine.canonical_text
+                    if arguments.get("reset_after_read", False) and text:
+                        self.sync_engine.reset()
+                    content = [{"type": "text", "text": text or "(No voice text dictated yet)"}]
+                    return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {"content": content, "isError": False}})
+
+                elif name == "voicebridge_get_clipboard_transfers":
+                    transfer_id = arguments.get("transfer_id")
+                    if transfer_id:
+                        text = self.transfer_mgr.get_history_item_full_text(transfer_id)
+                        content = [{"type": "text", "text": text or f"Transfer '{transfer_id}' not found."}]
+                        return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {"content": content, "isError": not bool(text)}})
+                    else:
+                        history = self.transfer_mgr.get_history()
+                        content = [{"type": "text", "text": json.dumps(history, indent=2)}]
+                        return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {"content": content, "isError": False}})
+
+                elif name == "voicebridge_type_text":
+                    text = arguments.get("text", "")
+                    success = self.keyboard.send_string_sync(text) if text else False
+                    content = [{"type": "text", "text": f"Injected {len(text)} chars." if success else "Failed to inject."}]
+                    return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {"content": content, "isError": not success}})
+
+                elif name == "voicebridge_set_clipboard":
+                    text = arguments.get("text", "")
+                    auto_paste = arguments.get("auto_paste", False)
+                    success = copy_and_paste_text(text, auto_paste=auto_paste) if text else False
+                    content = [{"type": "text", "text": f"Copied {len(text)} chars." if success else "Failed to copy."}]
+                    return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {"content": content, "isError": not success}})
+
+                return web.json_response({"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "isError": True}})
+
+            return web.json_response({"jsonrpc": "2.0", "id": req_id, "error": {"code": -32601, "message": "Method not found"}})
+        except Exception as e:
+            return web.json_response({"jsonrpc": "2.0", "error": {"code": -32603, "message": str(e)}}, status=500)
+
+    async def handle_mcp_http_get(self, request):
+        return web.json_response({
+            "service": "VoiceBridge MCP Streamable HTTP Endpoint",
+            "protocol": "Model Context Protocol (MCP)",
+            "endpoint": f"http://{self.host}:{self.port}/mcp",
+            "status": "ready"
+        })
 
     async def handle_qr_image(self, request):
         pairing_url = self.get_pairing_url()
