@@ -1,12 +1,20 @@
 {
   "name": "@webskr/voicebridge",
-  "version": "1.1.2",
-  "description": "VoiceBridge MCP Server: Stream phone voice dictation and 3000+ line clipboard into AI IDEs",
+  "version": "1.2.0",
+  "description": "Pure Node.js & Native Windows MCP Server: Stream phone voice dictation and 3000+ line clipboard into AI IDEs",
   "main": "bin/cli.js",
   "bin": {
     "voicebridge": "bin/cli.js",
     "voicebridge-mcp": "bin/cli.js"
   },
+  "files": [
+    "bin",
+    "lib",
+    "skills",
+    "web/dist",
+    "mcp_config.json",
+    "readme.md"
+  ],
   "publishConfig": {
     "access": "public"
   },
@@ -27,5 +35,9 @@
     "setup": "node bin/cli.js setup",
     "dev": "npm --prefix web run dev",
     "build": "npm --prefix web run build"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "ws": "^8.22.2"
   }
 }

@@ -1,2 +1,0 @@
-# VoiceBridge Agent package
-

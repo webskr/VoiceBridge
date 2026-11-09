@@ -13,13 +13,28 @@
 
 ## ⚡ 1-Click Automatic Setup (Recommended)
 
-Just run this single command in your terminal to automatically detect and configure **Google Antigravity, Cursor, Claude Desktop, and VS Code**:
+Just run this single command in your terminal to automatically detect and configure **Google Antigravity, Cursor, Claude Desktop, and VS Code**, plus install the `/voicebridge` slash command:
 
 ```bash
 npx -y @webskr/voicebridge setup
 ```
 
-That's it! It automatically detects your installed IDEs and adds the MCP server configuration for you without touching any JSON files.
+That's it! It automatically detects your installed IDEs, registers the MCP server, installs the Antigravity `/voicebridge` slash command, and opens your companion dashboard. Zero manual JSON editing!
+
+### 🎯 Antigravity Slash Command: `/voicebridge`
+In Antigravity IDE, simply type:
+```text
+/voicebridge
+```
+The agent immediately checks server health, displays your phone pairing QR code and PIN, and retrieves your voice dictation!
+
+---
+
+## 🚀 100% Pure Node.js & Native Windows (No Python Required)
+VoiceBridge is built with zero Python or heavy runtime dependencies:
+- **Core Server**: Pure Node.js (`lib/server.js`) with HTTP, WebSockets, and chunked transfer.
+- **Native Injector**: 5.6 KB compiled Windows native binary (`bin/win_inject.exe`) utilizing `SendInput` Unicode typing and clipboard injection in under 10ms.
+- **Frontend Dashboard**: High-performance React companion app served directly at `http://localhost:57890/webskr/voice-bridge`.
 
 ---
 
@@ -118,7 +133,7 @@ VoiceBridge is already pre-configured in your workspace (`mcp_config.json`) and 
 2. Navigate to **Features** ➔ **MCP Servers** ➔ **Add New MCP Server**.
 3. Choose either:
    - **Type:** `sse` / `url` ➔ **URL:** `http://127.0.0.1:57890/mcp`
-   - **Type:** `command` ➔ **Command:** `npx -y voicebridge-mcp`
+   - **Type:** `command` ➔ **Command:** `npx -y @webskr/voicebridge`
 4. Or save `.cursor/mcp.json` in your project root:
 ```json
 {
@@ -137,7 +152,7 @@ Add VoiceBridge to your `%APPDATA%\Claude\claude_desktop_config.json`:
   "mcpServers": {
     "voicebridge": {
       "command": "npx",
-      "args": ["-y", "voicebridge-mcp"]
+      "args": ["-y", "@webskr/voicebridge"]
     }
   }
 }

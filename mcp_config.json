@@ -1,8 +1,11 @@
 {
   "mcpServers": {
     "voicebridge": {
-      "command": "npx",
+      "command": "cmd.exe",
       "args": [
+        "/d",
+        "/c",
+        "npx",
         "-y",
         "@webskr/voicebridge"
       ]

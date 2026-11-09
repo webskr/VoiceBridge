@@ -70,77 +70,23 @@ async function isServerRunning() {
   }
 }
 
-function getPythonCommand() {
-  const candidates = [
-    'C:\\Python314\\python.exe',
-    'C:\\Users\\draj8\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
-    'python3',
-    'python',
-    'py'
-  ];
-  for (const cmd of candidates) {
-    if (path.isAbsolute(cmd) && fs.existsSync(cmd)) {
-      return cmd;
-    }
-  }
-  return 'python';
-}
-
-function getProjectDir() {
-  const localDir = path.resolve(__dirname, '..');
-  if (fs.existsSync(path.join(localDir, 'agent', 'main.py'))) {
-    return localDir;
-  }
-  if (fs.existsSync('d:\\app\\hackthon\\agent\\main.py')) {
-    return 'd:\\app\\hackthon';
-  }
-  return localDir;
-}
+let inProcessServer = null;
 
 async function ensureBackendRunning() {
   if (await isServerRunning()) {
-    log('VoiceBridge background engine is already running.');
+    log('VoiceBridge background engine is already running on port 57890.');
     return;
   }
 
-  log('VoiceBridge engine not detected. Launching in background...');
-  
-  const rootDir = getProjectDir();
-  const pythonCmd = getPythonCommand();
-  const exePath = path.join(rootDir, 'dist', 'VoiceBridge.exe');
-
-  log(`Spawning VoiceBridge background agent using ${pythonCmd} in ${rootDir}...`);
-  const child = spawn(pythonCmd, ['-m', 'agent.main', '--no-browser'], {
-    cwd: rootDir,
-    detached: true,
-    env: { ...process.env, PYTHONPATH: rootDir },
-    stdio: 'ignore'
-  });
-
-  child.on('error', (err) => {
-    log(`Failed to spawn python: ${err.message}`);
-    if (fs.existsSync(exePath)) {
-      log(`Falling back to compiled binary: ${exePath}`);
-      const exeChild = spawn(exePath, ['--no-browser'], {
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      });
-      exeChild.unref();
-    }
-  });
-  child.unref();
-
-  // Poll for up to 6 seconds
-  for (let i = 0; i < 20; i++) {
-    await new Promise(r => setTimeout(r, 300));
-    if (await isServerRunning()) {
-      log('VoiceBridge background engine successfully started.');
-      return;
-    }
+  log('VoiceBridge engine not detected. Starting in-process Pure Node.js engine on port 57890...');
+  try {
+    const { VoiceBridgeServer } = require('../lib/server.js');
+    inProcessServer = new VoiceBridgeServer(VOICEBRIDGE_PORT);
+    inProcessServer.start();
+    log(`VoiceBridge pure Node engine listening on port ${VOICEBRIDGE_PORT}. Pairing PIN: ${inProcessServer.pin}`);
+  } catch (err) {
+    log(`Failed to start in-process server: ${err.message}`);
   }
-
-  log('Warning: VoiceBridge server did not respond within timeout.');
 }
 
 // Tool definitions for MCP
@@ -221,6 +167,27 @@ const TOOLS = [
 async function handleToolCall(name, args = {}) {
   try {
     if (name === 'voicebridge_status') {
+      if (inProcessServer) {
+        const info = {
+          service: 'VoiceBridge Windows Agent (Pure Node.js)',
+          version: '1.2.0',
+          host: inProcessServer.host,
+          port: inProcessServer.port,
+          pin: inProcessServer.pin,
+          active_mobile: inProcessServer.mobileWs !== null && inProcessServer.mobileWs.readyState === 1,
+          connected_companions: inProcessServer.companionSockets.size,
+          paused: inProcessServer.injector.isPaused,
+          canonical_length: inProcessServer.sync.canonicalText.length,
+          canonical_text: inProcessServer.sync.canonicalText,
+          history_count: inProcessServer.transfers.history.length,
+          dashboard_url: `http://localhost:${inProcessServer.port}/webskr/voice-bridge`,
+          mobile_url: `http://${inProcessServer.host}:${inProcessServer.port}/?pin=${inProcessServer.pin}`
+        };
+        return {
+          content: [{ type: 'text', text: JSON.stringify(info, null, 2) }],
+          isError: false
+        };
+      }
       const res = await httpRequest('GET', '/status');
       return {
         content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
@@ -229,10 +196,18 @@ async function handleToolCall(name, args = {}) {
     }
 
     if (name === 'voicebridge_get_live_voice') {
-      const res = await httpRequest('GET', '/api/voice/get');
-      const text = res.text || '';
-      if (args.reset_after_read && text) {
-        await httpRequest('POST', '/api/voice/reset', {});
+      let text = '';
+      if (inProcessServer) {
+        text = inProcessServer.sync.canonicalText || '';
+        if (args.reset_after_read && text) {
+          inProcessServer.sync.reset();
+        }
+      } else {
+        const res = await httpRequest('GET', '/api/voice/get');
+        text = res.text || '';
+        if (args.reset_after_read && text) {
+          await httpRequest('POST', '/api/voice/reset', {});
+        }
       }
       return {
         content: [{ type: 'text', text: text || '(No voice text dictated yet)' }],
@@ -242,15 +217,26 @@ async function handleToolCall(name, args = {}) {
 
     if (name === 'voicebridge_get_clipboard_transfers') {
       if (args.transfer_id) {
-        const res = await httpRequest('GET', `/api/history/item?id=${encodeURIComponent(args.transfer_id)}`);
+        let text = '';
+        if (inProcessServer) {
+          text = inProcessServer.transfers.getFullText(args.transfer_id);
+        } else {
+          const res = await httpRequest('GET', `/api/history/item?id=${encodeURIComponent(args.transfer_id)}`);
+          text = res.text;
+        }
         return {
-          content: [{ type: 'text', text: res.text || `Transfer '${args.transfer_id}' not found.` }],
-          isError: !res.text
+          content: [{ type: 'text', text: text || `Transfer '${args.transfer_id}' not found.` }],
+          isError: !text
         };
       } else {
-        const res = await httpRequest('GET', '/api/history');
+        let history = [];
+        if (inProcessServer) {
+          history = inProcessServer.transfers.getHistory();
+        } else {
+          history = await httpRequest('GET', '/api/history');
+        }
         return {
-          content: [{ type: 'text', text: JSON.stringify(res, null, 2) }],
+          content: [{ type: 'text', text: JSON.stringify(history, null, 2) }],
           isError: false
         };
       }
@@ -258,21 +244,37 @@ async function handleToolCall(name, args = {}) {
 
     if (name === 'voicebridge_type_text') {
       const text = args.text || '';
-      const res = await httpRequest('POST', '/api/type', { text });
+      let success = false;
+      let error = null;
+      if (inProcessServer) {
+        success = inProcessServer.injector.typeString(text);
+      } else {
+        const res = await httpRequest('POST', '/api/type', { text });
+        success = res.success;
+        error = res.error;
+      }
       return {
-        content: [{ type: 'text', text: res.success ? `Successfully typed ${text.length} characters into active window.` : `Failed: ${res.error}` }],
-        isError: !res.success
+        content: [{ type: 'text', text: success ? `Successfully typed ${text.length} characters into active window.` : `Failed: ${error || 'Native typing failed'}` }],
+        isError: !success
       };
     }
 
     if (name === 'voicebridge_set_clipboard') {
       const text = args.text || '';
       const auto_paste = !!args.auto_paste;
-      const res = await httpRequest('POST', '/api/clipboard', { text, auto_paste });
+      let success = false;
+      let error = null;
+      if (inProcessServer) {
+        success = inProcessServer.injector.setClipboard(text);
+      } else {
+        const res = await httpRequest('POST', '/api/clipboard', { text, auto_paste });
+        success = res.success;
+        error = res.error;
+      }
       const action = auto_paste ? 'Copied and pasted' : 'Copied to clipboard';
       return {
-        content: [{ type: 'text', text: res.success ? `${action} (${text.length} characters).` : `Failed: ${res.error}` }],
-        isError: !res.success
+        content: [{ type: 'text', text: success ? `${action} (${text.length} characters).` : `Failed: ${error || 'Clipboard copy failed'}` }],
+        isError: !success
       };
     }
 
@@ -306,7 +308,7 @@ async function processMessage(msg) {
         capabilities: { tools: {} },
         serverInfo: {
           name: 'voicebridge-mcp',
-          version: '1.1.0'
+          version: '1.2.0'
         }
       }
     };
@@ -434,11 +436,54 @@ async function runSetup() {
     }
   }
 
+  // Install Antigravity slash command skill (/voicebridge)
+  const skillsDir = path.join(home, '.gemini', 'config', 'skills', 'voicebridge');
+  try {
+    if (!fs.existsSync(skillsDir)) {
+      fs.mkdirSync(skillsDir, { recursive: true });
+    }
+    const skillContent = `---
+name: voicebridge
+description: Start VoiceBridge server, display connection QR code and PIN, and fetch live voice dictation or clipboard transfers from connected phone.
+metadata:
+  version: "1.2.0"
+---
+
+# VoiceBridge (/voicebridge)
+
+VoiceBridge connects your mobile phone to your AI coding IDE (Antigravity, Cursor, VS Code, Claude) with real-time Gboard voice typing, 3,000+ line chunked clipboard sync, and zero-latency Windows injection.
+
+## What to do when the user types /voicebridge:
+1. Call MCP tool 'voicebridge_status' to fetch connection PIN and server health.
+2. Provide clickable link to PC Dashboard (http://localhost:57890/webskr/voice-bridge) and mobile QR code URL.
+3. If user dictated voice text, retrieve it with 'voicebridge_get_live_voice'.
+`;
+    fs.writeFileSync(path.join(skillsDir, 'SKILL.md'), skillContent, 'utf8');
+    console.log(`  ✔  Antigravity Skill          -> Installed (/voicebridge)`);
+    successCount++;
+  } catch (err) {
+    // Non-fatal
+  }
+
+  // Ensure background engine is running before opening dashboard
+  console.log('\nStarting VoiceBridge pure Node.js background engine...');
+  await ensureBackendRunning();
+
+  let status = null;
+  try {
+    status = await httpRequest('GET', '/status');
+  } catch {}
+
+  const hostIp = (status && status.host) ? status.host : 'YOUR_PC_IP';
+  const pin = (status && status.pin) ? status.pin : '------';
+
   console.log('\n------------------------------------------------------');
   console.log(`✨ Successfully installed VoiceBridge into ${successCount} configuration(s)!`);
-  console.log('💻 PC Dashboard : http://localhost:57890/webskr/voice-bridge');
-  console.log('📱 Mobile URL   : http://<YOUR_PC_IP>:57890');
-  console.log('🤖 MCP Server   : npx -y @webskr/voicebridge');
+  console.log(`💻 PC Dashboard : http://localhost:57890/webskr/voice-bridge`);
+  console.log(`📱 Mobile URL   : http://${hostIp}:57890/?pin=${pin}`);
+  console.log(`🔑 Pairing PIN  : ${pin}`);
+  console.log(`⚡ Slash Command: /voicebridge (in Antigravity)`);
+  console.log(`🤖 MCP Server   : npx -y @webskr/voicebridge`);
   console.log('======================================================\n');
 
   // Automatically open the PC Dashboard in user's default browser
@@ -452,6 +497,24 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.includes('setup') || args.includes('--setup') || args.includes('install')) {
     return runSetup();
+  }
+
+  if (args.includes('start') || args.includes('server')) {
+    const { VoiceBridgeServer } = require('../lib/server.js');
+    const server = new VoiceBridgeServer();
+    server.start();
+    return;
+  }
+
+  if (args.includes('status')) {
+    const running = await isServerRunning();
+    if (!running) {
+      console.log('VoiceBridge server is NOT running. Run "npx @webskr/voicebridge start" or "setup".');
+      process.exit(1);
+    }
+    const res = await httpRequest('GET', '/status');
+    console.log(JSON.stringify(res, null, 2));
+    process.exit(0);
   }
 
   log('Starting VoiceBridge NPX MCP Server (@webskr/voicebridge)...');
