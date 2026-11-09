@@ -70,6 +70,33 @@ async function isServerRunning() {
   }
 }
 
+function getPythonCommand() {
+  const candidates = [
+    'C:\\Python314\\python.exe',
+    'C:\\Users\\draj8\\AppData\\Local\\Programs\\Python\\Python312\\python.exe',
+    'python3',
+    'python',
+    'py'
+  ];
+  for (const cmd of candidates) {
+    if (path.isAbsolute(cmd) && fs.existsSync(cmd)) {
+      return cmd;
+    }
+  }
+  return 'python';
+}
+
+function getProjectDir() {
+  const localDir = path.resolve(__dirname, '..');
+  if (fs.existsSync(path.join(localDir, 'agent', 'main.py'))) {
+    return localDir;
+  }
+  if (fs.existsSync('d:\\app\\hackthon\\agent\\main.py')) {
+    return 'd:\\app\\hackthon';
+  }
+  return localDir;
+}
+
 async function ensureBackendRunning() {
   if (await isServerRunning()) {
     log('VoiceBridge background engine is already running.');
@@ -78,19 +105,20 @@ async function ensureBackendRunning() {
 
   log('VoiceBridge engine not detected. Launching in background...');
   
-  // Launch background agent via python or compiled binary
-  const rootDir = path.resolve(__dirname, '..');
+  const rootDir = getProjectDir();
+  const pythonCmd = getPythonCommand();
   const exePath = path.join(rootDir, 'dist', 'VoiceBridge.exe');
 
-  log('Spawning VoiceBridge background agent...');
-  const child = spawn('python', ['-m', 'agent.main', '--no-browser'], {
+  log(`Spawning VoiceBridge background agent using ${pythonCmd} in ${rootDir}...`);
+  const child = spawn(pythonCmd, ['-m', 'agent.main', '--no-browser'], {
     cwd: rootDir,
     detached: true,
-    stdio: 'ignore',
-    windowsHide: true
+    env: { ...process.env, PYTHONPATH: rootDir },
+    stdio: 'ignore'
   });
 
-  child.on('error', () => {
+  child.on('error', (err) => {
+    log(`Failed to spawn python: ${err.message}`);
     if (fs.existsSync(exePath)) {
       log(`Falling back to compiled binary: ${exePath}`);
       const exeChild = spawn(exePath, ['--no-browser'], {
@@ -341,10 +369,15 @@ function injectMcpConfig(filePath, mcpKey = 'mcpServers') {
       config[mcpKey] = {};
     }
 
-    config[mcpKey].voicebridge = {
-      command: 'npx',
-      args: ['-y', '@webskr/voicebridge']
-    };
+    config[mcpKey].voicebridge = process.platform === 'win32'
+      ? {
+          command: 'cmd.exe',
+          args: ['/d', '/c', 'npx', '-y', '@webskr/voicebridge']
+        }
+      : {
+          command: 'npx',
+          args: ['-y', '@webskr/voicebridge']
+        };
 
     fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf8');
     return true;
