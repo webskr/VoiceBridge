@@ -79,10 +79,12 @@ class VoiceBridgeServer:
             self.app.router.add_static('/assets', path=os.path.join(self.web_dist_dir, 'assets'), name='assets')
             self.app.router.add_get('/', self.handle_index)
             self.app.router.add_get('/companion', self.handle_index)
+            self.app.router.add_get('/webskr/voice-bridge', self.handle_index)
         else:
             logger.info("web/dist not found yet, serving built-in lightweight landing page.")
             self.app.router.add_get('/', self.handle_builtin_page)
             self.app.router.add_get('/companion', self.handle_builtin_page)
+            self.app.router.add_get('/webskr/voice-bridge', self.handle_builtin_page)
 
     async def handle_index(self, request):
         index_file = os.path.join(self.web_dist_dir, 'index.html')
@@ -116,7 +118,7 @@ class VoiceBridgeServer:
             <img class="qr" src="/qr" alt="Pairing QR Code" />
         </div>
         <p>Endpoint: <code>http://{self.host}:{self.port}</code></p>
-        <a class="btn" href="/companion">Open PC Companion</a>
+        <a class="btn" href="/webskr/voice-bridge">Open PC Dashboard</a>
     </div>
 </body>
 </html>"""

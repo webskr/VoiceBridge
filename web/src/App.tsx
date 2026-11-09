@@ -8,7 +8,7 @@ import { ClipboardTransfer } from './components/ClipboardTransfer';
 import { PcCompanion } from './components/PcCompanion';
 
 export const App: React.FC = () => {
-  const isCompanionView = window.location.pathname.includes('/companion');
+  const isCompanionView = window.location.pathname.includes('/webskr/voice-bridge') || window.location.pathname.includes('/companion');
   const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<string>('Android Phone');

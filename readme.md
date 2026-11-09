@@ -175,9 +175,9 @@ Add VoiceBridge to your extension's MCP configuration (e.g. `cline_mcp_settings.
 [ AI IDE (Antigravity / Cursor / Claude / VS Code) ]
 ```
 
-1. **Start Your IDE:**
-   - Your IDE automatically loads the VoiceBridge MCP tools.
-   - The engine boots in the background on port `57890`.
+1. **Start Your IDE or Run Setup:**
+   - Run `npx -y @webskr/voicebridge setup` (automatically configures your IDE and opens the dashboard).
+   - **PC Dashboard URL:** `http://localhost:57890/webskr/voice-bridge`
 
 2. **Open the Mobile Interface:**
    - Connect your phone to the same Wi-Fi router or PC mobile hotspot.
@@ -188,7 +188,7 @@ Add VoiceBridge to your extension's MCP configuration (e.g. `cline_mcp_settings.
    - *(Tip: Ask your AI agent "What is my VoiceBridge pairing URL and PIN?" to get the link instantly).*
 
 3. **Pair with PIN:**
-   - Enter the 6-character PIN shown in your companion dashboard or provided by the agent.
+   - Enter the 6-character PIN shown in your PC Dashboard (`http://localhost:57890/webskr/voice-bridge`) or provided by the agent.
 
 4. **Dictate or Transfer:**
    - **Voice Typing:** Tap the microphone icon on your mobile Gboard and speak in Hindi or English.

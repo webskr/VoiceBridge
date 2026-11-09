@@ -60,7 +60,7 @@ def print_banner(host: str, port: int, pin: str, pairing_url: str):
     print(f"{Fore.GREEN}● Pairing PIN:        {Fore.YELLOW}{Style.BRIGHT}{pin}")
     print(f"{Fore.GREEN}● Windows Startup:    {Fore.WHITE}{startup_status}")
     print(f"{Fore.GREEN}● Mobile Web App URL: {Fore.CYAN}{pairing_url}")
-    print(f"{Fore.GREEN}● PC Dashboard URL:   {Fore.CYAN}http://localhost:{port}/companion")
+    print(f"{Fore.GREEN}● PC Dashboard URL:   {Fore.CYAN}http://localhost:{port}/webskr/voice-bridge")
     print(Fore.CYAN + "-" * 65)
     print(Fore.YELLOW + "Scan the QR code below on your mobile phone to connect:")
     print(Fore.CYAN + "-" * 65 + "\n")
@@ -135,7 +135,7 @@ def main():
     print_banner(lan_ip, port, security.active_pin, pairing_url)
 
     if not args.no_browser:
-        webbrowser.open(f"http://localhost:{port}/companion")
+        webbrowser.open(f"http://localhost:{port}/webskr/voice-bridge")
 
     web.run_app(server.app, host="0.0.0.0", port=port, print=False)
 

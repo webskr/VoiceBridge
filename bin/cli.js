@@ -403,9 +403,15 @@ async function runSetup() {
 
   console.log('\n------------------------------------------------------');
   console.log(`✨ Successfully installed VoiceBridge into ${successCount} configuration(s)!`);
-  console.log('📱 Phone URL : http://<YOUR_PC_IP>:57890');
-  console.log('🤖 MCP Server: npx -y @webskr/voicebridge');
+  console.log('💻 PC Dashboard : http://localhost:57890/webskr/voice-bridge');
+  console.log('📱 Mobile URL   : http://<YOUR_PC_IP>:57890');
+  console.log('🤖 MCP Server   : npx -y @webskr/voicebridge');
   console.log('======================================================\n');
+
+  // Automatically open the PC Dashboard in user's default browser
+  const openCmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  spawn(openCmd, ['http://localhost:57890/webskr/voice-bridge'], { shell: true, detached: true, stdio: 'ignore' }).unref();
+
   process.exit(0);
 }
 
