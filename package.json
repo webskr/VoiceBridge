@@ -1,6 +1,6 @@
 {
   "name": "@webskr/voicebridge",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "VoiceBridge MCP Server: Stream phone voice dictation and 3000+ line clipboard into AI IDEs",
   "main": "bin/cli.js",
   "bin": {
