@@ -78,28 +78,30 @@ async function ensureBackendRunning() {
 
   log('VoiceBridge engine not detected. Launching in background...');
   
-  // Try locating pre-built exe or python script
+  // Launch background agent via python or compiled binary
   const rootDir = path.resolve(__dirname, '..');
   const exePath = path.join(rootDir, 'dist', 'VoiceBridge.exe');
 
-  if (fs.existsSync(exePath)) {
-    log(`Launching binary: ${exePath}`);
-    const child = spawn(exePath, ['--no-browser'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true
-    });
-    child.unref();
-  } else {
-    log('Launching via Python agent.main...');
-    const child = spawn('python', ['-m', 'agent.main', '--no-browser'], {
-      cwd: rootDir,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true
-    });
-    child.unref();
-  }
+  log('Spawning VoiceBridge background agent...');
+  const child = spawn('python', ['-m', 'agent.main', '--no-browser'], {
+    cwd: rootDir,
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  });
+
+  child.on('error', () => {
+    if (fs.existsSync(exePath)) {
+      log(`Falling back to compiled binary: ${exePath}`);
+      const exeChild = spawn(exePath, ['--no-browser'], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      exeChild.unref();
+    }
+  });
+  child.unref();
 
   // Poll for up to 6 seconds
   for (let i = 0; i < 20; i++) {
