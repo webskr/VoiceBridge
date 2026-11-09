@@ -94,16 +94,22 @@ It also features a dedicated **High-Volume Clipboard Engine** capable of transfe
 
 ## 🤖 IDE & MCP Server Integration
 
-VoiceBridge can run as a **Model Context Protocol (MCP)** server directly inside your AI IDE (Antigravity, Cursor, VS Code):
+VoiceBridge includes a native **Model Context Protocol (MCP)** server (`agent/mcp_server.py`). This allows your AI coding assistant (in Antigravity, Cursor, VS Code, or Claude Desktop) to directly interact with your phone's voice typing and high-volume clipboard transfers **without opening any terminal, manual server, or command prompt.**
 
-### Available MCP Tools:
-1. `voicebridge_status` — View connection health, local IP, phone pairing PIN, and active mobile state.
-2. `voicebridge_get_live_voice` — Stream or fetch the live speech dictated from phone's Gboard microphone directly into agent context.
-3. `voicebridge_get_clipboard_transfers` — Ingest 3,000+ line code/text transfers directly into workspace files.
-4. `voicebridge_type_text` — Let the AI agent type text into whichever window is currently active on Windows.
-5. `voicebridge_set_clipboard` — Set Windows clipboard and optionally simulate `Ctrl+V` paste.
+### 🌟 Key Advantages of MCP Mode:
+- **Zero Terminal Overhead**: The IDE starts and manages the VoiceBridge server automatically in the background.
+- **Hands-Free AI Prompting**: Speak coding prompts from your bed or couch using Gboard voice typing on your phone; the IDE AI agent reads it directly!
+- **Zero-Focus Code Ingestion**: Send 3,000+ lines of code from mobile into IDE files cleanly, without clipboard conflicts or cursor focus issues.
+- **Bilingual Dictation**: Full support for English and Hindi Unicode voice typing.
 
-### IDE Configuration (`mcp_config.json`):
+---
+
+### 📦 Quick Setup Guide by IDE
+
+#### 1. Google Antigravity IDE (Already Configured)
+VoiceBridge is already pre-configured in your Antigravity global configuration (`~/.gemini/config/mcp_config.json`) and repo root (`mcp_config.json`).
+
+To verify or manually add:
 ```json
 {
   "mcpServers": {
@@ -111,12 +117,104 @@ VoiceBridge can run as a **Model Context Protocol (MCP)** server directly inside
       "command": "python",
       "args": ["-m", "agent.mcp_server"],
       "env": {
-        "PYTHONPATH": "."
+        "PYTHONPATH": "d:\\app\\hackthon"
       }
     }
   }
 }
 ```
+*Note: Tools like `mcp_voicebridge_status` and `mcp_voicebridge_get_live_voice` will appear in the agent tools list.*
+
+#### 2. Cursor IDE
+1. Open **Cursor Settings** (`Ctrl + ,` or top-right gear icon).
+2. Go to **Features** ➔ **MCP Servers** ➔ **Add New MCP Server**.
+3. Fill in:
+   - **Name**: `voicebridge`
+   - **Type**: `command`
+   - **Command**: `python -m agent.mcp_server`
+4. Alternatively, create `.cursor/mcp.json` in your workspace:
+```json
+{
+  "mcpServers": {
+    "voicebridge": {
+      "command": "python",
+      "args": ["-m", "agent.mcp_server"]
+    }
+  }
+}
+```
+
+#### 3. Claude Desktop
+Add VoiceBridge to `%APPDATA%\Claude\claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "voicebridge": {
+      "command": "python",
+      "args": ["-m", "agent.mcp_server"],
+      "cwd": "d:\\app\\hackthon"
+    }
+  }
+}
+```
+
+#### 4. VS Code (Cline / Roo Code / Continue)
+In your Cline / Roo Code MCP settings (`cline_mcp_settings.json`):
+```json
+{
+  "mcpServers": {
+    "voicebridge": {
+      "command": "python",
+      "args": ["-m", "agent.mcp_server"],
+      "cwd": "d:\\app\\hackthon"
+    }
+  }
+}
+```
+
+---
+
+### 🚀 How to Use VoiceBridge via MCP (Step-by-Step)
+
+```text
+[Phone Browser (Gboard / Mic)]
+         │
+         ▼ (Wi-Fi / Hotspot)
+[VoiceBridge Background Engine]
+         │
+         ▼ (MCP JSON-RPC Protocol)
+[IDE Assistant (Antigravity / Cursor / Claude)]
+```
+
+1. **Start Your IDE**:
+   - Open your project in the IDE.
+   - The MCP server starts automatically and boots the VoiceBridge background engine on port `57890`.
+
+2. **Connect Phone**:
+   - Open your phone's browser and go to `http://<your-pc-ip>:57890` (or ask your AI: *"What is my VoiceBridge pairing PIN and IP?"*).
+   - Enter the 6-character PIN displayed.
+
+3. **Dictate or Paste on Phone**:
+   - Tap the microphone icon on your mobile Gboard and speak in Hindi or English.
+   - Or paste a 3,000+ line code block into the Clipboard Transfer tab.
+
+4. **Prompt the AI**:
+   - Simply prompt your AI agent:
+     - *"Read what I just dictated on my phone and implement the feature."*
+     - *"Check phone clipboard and save the incoming code into utils.py."*
+     - *"Type this generated SQL query into the active database window."*
+
+---
+
+### 🧰 Available MCP Tools Reference
+
+| Tool Name | Parameters | Description |
+|---|---|---|
+| `voicebridge_status` | *None* | Returns server status, pairing PIN, host IP, whether phone is connected, and canonical length. |
+| `voicebridge_get_live_voice` | `reset_after_read` (bool) | Fetches the live text dictated via mobile voice typing. Can optionally reset the buffer. |
+| `voicebridge_get_clipboard_transfers` | `transfer_id` (string, opt) | Lists all clipboard transfers or retrieves the complete full text of a 3,000+ line transfer. |
+| `voicebridge_type_text` | `text` (string, required) | Types text into whichever Windows window has the active cursor using native `SendInput`. |
+| `voicebridge_set_clipboard` | `text` (string), `auto_paste` (bool) | Sets Windows clipboard and optionally fires simulated `Ctrl+V` to paste immediately. |
 
 ---
 
