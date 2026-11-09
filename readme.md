@@ -92,6 +92,34 @@ It also features a dedicated **High-Volume Clipboard Engine** capable of transfe
 
 ---
 
+## 🤖 IDE & MCP Server Integration
+
+VoiceBridge can run as a **Model Context Protocol (MCP)** server directly inside your AI IDE (Antigravity, Cursor, VS Code):
+
+### Available MCP Tools:
+1. `voicebridge_status` — View connection health, local IP, phone pairing PIN, and active mobile state.
+2. `voicebridge_get_live_voice` — Stream or fetch the live speech dictated from phone's Gboard microphone directly into agent context.
+3. `voicebridge_get_clipboard_transfers` — Ingest 3,000+ line code/text transfers directly into workspace files.
+4. `voicebridge_type_text` — Let the AI agent type text into whichever window is currently active on Windows.
+5. `voicebridge_set_clipboard` — Set Windows clipboard and optionally simulate `Ctrl+V` paste.
+
+### IDE Configuration (`mcp_config.json`):
+```json
+{
+  "mcpServers": {
+    "voicebridge": {
+      "command": "python",
+      "args": ["-m", "agent.mcp_server"],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
+```
+
+---
+
 ## 🛠️ CLI Options
 
 ```powershell

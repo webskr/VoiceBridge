@@ -56,8 +56,13 @@ class VoiceBridgeServer:
         self.app.router.add_get('/status', self.handle_status)
         self.app.router.add_get('/qr', self.handle_qr_image)
         self.app.router.add_get('/api/history', self.handle_get_history)
+        self.app.router.add_get('/api/history/item', self.handle_get_history_item)
         self.app.router.add_post('/api/history/copy', self.handle_copy_history)
         self.app.router.add_post('/api/history/inject', self.handle_inject_history)
+        self.app.router.add_get('/api/voice/get', self.handle_get_voice)
+        self.app.router.add_post('/api/voice/reset', self.handle_reset_voice)
+        self.app.router.add_post('/api/type', self.handle_direct_type)
+        self.app.router.add_post('/api/clipboard', self.handle_direct_clipboard)
         self.app.router.add_get('/api/startup', self.handle_get_startup)
         self.app.router.add_post('/api/startup', self.handle_set_startup)
 
@@ -124,9 +129,59 @@ class VoiceBridgeServer:
             "connected_companions": len(self.companion_ws_set),
             "paused": self.keyboard.is_paused,
             "canonical_length": len(self.sync_engine.canonical_text),
+            "canonical_text": self.sync_engine.canonical_text,
             "startup_enabled": is_startup_enabled(),
             "history_count": len(self.transfer_mgr.history)
         })
+
+    async def handle_get_voice(self, request):
+        return web.json_response({
+            "text": self.sync_engine.canonical_text,
+            "length": len(self.sync_engine.canonical_text),
+            "revision": self.sync_engine.last_revision
+        })
+
+    async def handle_reset_voice(self, request):
+        self.sync_engine.reset()
+        await self.broadcast_to_companions({
+            "type": "doc_update",
+            "text": "",
+            "revision": 0,
+            "is_final": True
+        })
+        return web.json_response({"success": True})
+
+    async def handle_get_history_item(self, request):
+        item_id = request.query.get("id")
+        if not item_id:
+            return web.json_response({"success": False, "error": "Missing id parameter"}, status=400)
+        text = self.transfer_mgr.get_history_item_full_text(item_id)
+        if text is not None:
+            return web.json_response({"id": item_id, "text": text})
+        return web.json_response({"success": False, "error": "Item not found"}, status=404)
+
+    async def handle_direct_type(self, request):
+        try:
+            body = await request.json()
+            text = body.get("text", "")
+            if text:
+                success = self.keyboard.send_string_sync(text)
+                return web.json_response({"success": success})
+            return web.json_response({"success": False, "error": "No text provided"}, status=400)
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)}, status=500)
+
+    async def handle_direct_clipboard(self, request):
+        try:
+            body = await request.json()
+            text = body.get("text", "")
+            auto_paste = body.get("auto_paste", False)
+            if text:
+                success = copy_and_paste_text(text, auto_paste=auto_paste)
+                return web.json_response({"success": success})
+            return web.json_response({"success": False, "error": "No text provided"}, status=400)
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)}, status=500)
 
     async def handle_qr_image(self, request):
         pairing_url = self.get_pairing_url()

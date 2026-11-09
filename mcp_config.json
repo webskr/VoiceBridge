@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "voicebridge": {
+      "command": "python",
+      "args": [
+        "-m",
+        "agent.mcp_server"
+      ],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
