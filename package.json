@@ -4,8 +4,8 @@
   "description": "VoiceBridge MCP Server: Stream phone voice dictation and 3000+ line clipboard into AI IDEs",
   "main": "bin/cli.js",
   "bin": {
-    "voicebridge": "./bin/cli.js",
-    "voicebridge-mcp": "./bin/cli.js"
+    "voicebridge": "bin/cli.js",
+    "voicebridge-mcp": "bin/cli.js"
   },
   "publishConfig": {
     "access": "public"
@@ -29,4 +29,3 @@
     "build": "npm --prefix web run build"
   }
 }
-

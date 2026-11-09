@@ -1,0 +1,12 @@
+node_modules/
+web/node_modules/
+build/
+scratch/
+dist/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+*.log
+!web/dist/
+
