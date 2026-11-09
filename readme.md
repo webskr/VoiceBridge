@@ -92,12 +92,24 @@ It also features a dedicated **High-Volume Clipboard Engine** capable of transfe
 
 ---
 
-## 🤖 IDE & MCP Server Integration
+## 🤖 IDE & MCP Server Integration (`npx voicebridge-mcp`)
 
-VoiceBridge includes a native **Model Context Protocol (MCP)** server (`agent/mcp_server.py`). This allows your AI coding assistant (in Antigravity, Cursor, VS Code, or Claude Desktop) to directly interact with your phone's voice typing and high-volume clipboard transfers **without opening any terminal, manual server, or command prompt.**
+VoiceBridge includes an official **NPX Model Context Protocol (MCP)** runner (`voicebridge-mcp`). You can run VoiceBridge in any AI IDE (Antigravity, Cursor, Claude Desktop, VS Code) using a single `npx` command — exactly like other popular MCP servers:
 
-### 🌟 Key Advantages of MCP Mode:
-- **Zero Terminal Overhead**: The IDE starts and manages the VoiceBridge server automatically in the background.
+```json
+{
+  "mcpServers": {
+    "voicebridge": {
+      "command": "npx",
+      "args": ["-y", "voicebridge-mcp"]
+    }
+  }
+}
+```
+
+### 🌟 Key Advantages of NPX MCP Mode:
+- **Zero Configuration**: No virtualenvs, no path issues, no manual terminal launch needed.
+- **Auto-Booting**: Automatically detects if VoiceBridge background engine is active; if not, silently boots it in the background!
 - **Hands-Free AI Prompting**: Speak coding prompts from your bed or couch using Gboard voice typing on your phone; the IDE AI agent reads it directly!
 - **Zero-Focus Code Ingestion**: Send 3,000+ lines of code from mobile into IDE files cleanly, without clipboard conflicts or cursor focus issues.
 - **Bilingual Dictation**: Full support for English and Hindi Unicode voice typing.
@@ -107,23 +119,18 @@ VoiceBridge includes a native **Model Context Protocol (MCP)** server (`agent/mc
 ### 📦 Quick Setup Guide by IDE
 
 #### 1. Google Antigravity IDE (Already Configured)
-VoiceBridge is already pre-configured in your Antigravity global configuration (`~/.gemini/config/mcp_config.json`) and repo root (`mcp_config.json`).
-
-To verify or manually add:
+VoiceBridge is already pre-configured in your Antigravity global configuration (`~/.gemini/config/mcp_config.json`) and repo root (`mcp_config.json`):
 ```json
 {
   "mcpServers": {
     "voicebridge": {
-      "command": "python",
-      "args": ["-m", "agent.mcp_server"],
-      "env": {
-        "PYTHONPATH": "d:\\app\\hackthon"
-      }
+      "command": "npx",
+      "args": ["-y", "voicebridge-mcp"]
     }
   }
 }
 ```
-*Note: Tools like `mcp_voicebridge_status` and `mcp_voicebridge_get_live_voice` will appear in the agent tools list.*
+*Tools like `voicebridge_status` and `voicebridge_get_live_voice` are automatically injected into the agent.*
 
 #### 2. Cursor IDE
 1. Open **Cursor Settings** (`Ctrl + ,` or top-right gear icon).
@@ -131,14 +138,14 @@ To verify or manually add:
 3. Fill in:
    - **Name**: `voicebridge`
    - **Type**: `command`
-   - **Command**: `python -m agent.mcp_server`
-4. Alternatively, create `.cursor/mcp.json` in your workspace:
+   - **Command**: `npx -y voicebridge-mcp`
+4. Or add to `.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
     "voicebridge": {
-      "command": "python",
-      "args": ["-m", "agent.mcp_server"]
+      "command": "npx",
+      "args": ["-y", "voicebridge-mcp"]
     }
   }
 }
@@ -150,9 +157,8 @@ Add VoiceBridge to `%APPDATA%\Claude\claude_desktop_config.json`:
 {
   "mcpServers": {
     "voicebridge": {
-      "command": "python",
-      "args": ["-m", "agent.mcp_server"],
-      "cwd": "d:\\app\\hackthon"
+      "command": "npx",
+      "args": ["-y", "voicebridge-mcp"]
     }
   }
 }
@@ -164,9 +170,8 @@ In your Cline / Roo Code MCP settings (`cline_mcp_settings.json`):
 {
   "mcpServers": {
     "voicebridge": {
-      "command": "python",
-      "args": ["-m", "agent.mcp_server"],
-      "cwd": "d:\\app\\hackthon"
+      "command": "npx",
+      "args": ["-y", "voicebridge-mcp"]
     }
   }
 }

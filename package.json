@@ -1,12 +1,26 @@
 {
-  "name": "voicebridge",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Secure Mobile Voice-to-PC Live Typing System",
+  "name": "voicebridge-mcp",
+  "version": "1.1.0",
+  "description": "VoiceBridge MCP Server: Stream phone voice dictation and 3000+ line clipboard into AI IDEs",
+  "main": "bin/cli.js",
+  "bin": {
+    "voicebridge-mcp": "./bin/cli.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "voicebridge",
+    "antigravity",
+    "cursor",
+    "speech-to-text",
+    "voice-typing"
+  ],
+  "author": "VoiceBridge Team",
+  "license": "MIT",
   "scripts": {
+    "start": "node bin/cli.js",
     "dev": "npm --prefix web run dev",
-    "build": "npm --prefix web run build",
-    "start": "python -m agent.main"
+    "build": "npm --prefix web run build"
   }
 }
 
