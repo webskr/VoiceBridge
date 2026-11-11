@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, FileText, Monitor, CheckCircle2 } from 'lucide-react';
+import { Mic, Keyboard as KeyboardIcon, MousePointer } from 'lucide-react';
 import { ConnectionState, WsMessage, TransferProgress, HistoryItem } from './types';
 import { ConnectionBadge } from './components/ConnectionBadge';
 import { PairingScreen } from './components/PairingScreen';
-import { MobileTyping } from './components/MobileTyping';
-import { ClipboardTransfer } from './components/ClipboardTransfer';
+import { Keyboard } from './components/Keyboard';
+import { MobileMouse } from './components/MobileMouse';
 import { PcCompanion } from './components/PcCompanion';
 
 export const App: React.FC = () => {
@@ -15,8 +15,8 @@ export const App: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Mobile mode tabs: 'voice' | 'clipboard'
-  const [mobileMode, setMobileMode] = useState<'voice' | 'clipboard'>('voice');
+  // 2 Mobile Modes: 'keyboard' | 'trackpad'
+  const [mobileMode, setMobileMode] = useState<'keyboard' | 'trackpad'>('keyboard');
 
   // Live Mirrored Text state (for PC Companion)
   const [companionText, setCompanionText] = useState('');
@@ -30,8 +30,11 @@ export const App: React.FC = () => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [startupEnabled, setStartupEnabled] = useState(false);
 
+  // Keep track of active pin in ref for auto-reconnection
+  const activePinRef = useRef<string>('');
   // WebSocket reference
   const wsRef = useRef<WebSocket | null>(null);
+  const wakeLockRef = useRef<any>(null);
 
   // Parse PIN from URL params if available (e.g. from QR scan)
   const urlParams = new URLSearchParams(window.location.search);
@@ -44,7 +47,12 @@ export const App: React.FC = () => {
     return `${proto}//${targetHost}:${targetPort}/ws`;
   };
 
-  const connectWs = useCallback((pin?: string, host?: string, port?: number) => {
+  const connectWs = useCallback((pinToUse?: string, host?: string, port?: number) => {
+    const currentPin = pinToUse || activePinRef.current || initialPin;
+    if (currentPin) {
+      activePinRef.current = currentPin;
+    }
+
     if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -64,11 +72,12 @@ export const App: React.FC = () => {
         if (isCompanionView) {
           ws.send(JSON.stringify({ type: 'companion_connect' }));
           setConnectionState('paired');
-        } else if (pin) {
+        } else if (currentPin) {
           const userAgent = navigator.userAgent.includes('Android') ? 'Android Phone' : 'Mobile Phone';
           ws.send(JSON.stringify({
             type: 'pair_request',
-            pin: pin,
+            pin: currentPin,
+            token: sessionToken,
             deviceInfo: userAgent
           }));
         }
@@ -98,7 +107,55 @@ export const App: React.FC = () => {
       setErrorMsg(err.message || 'Connection failed');
       setConnectionState('error');
     }
-  }, [isCompanionView]);
+  }, [isCompanionView, initialPin, sessionToken]);
+
+  // Keep screen awake (WakeLock API) so phone does not sleep and drop socket
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch (err) {
+        console.warn('Wake lock not granted', err);
+      }
+    };
+
+    if (connectionState === 'paired') {
+      requestWakeLock();
+    }
+
+    return () => {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch(() => {});
+        wakeLockRef.current = null;
+      }
+    };
+  }, [connectionState]);
+
+  // Handle mobile app switching back from background / screen off
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page visible again - verifying connection health');
+        if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED || wsRef.current.readyState === WebSocket.CLOSING) {
+          console.log('Reconnecting dropped socket upon screen wake...');
+          connectWs(activePinRef.current);
+        } else if (wsRef.current.readyState === WebSocket.OPEN) {
+          // Send a keep-alive ping
+          wsRef.current.send(JSON.stringify({ type: 'ping' }));
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [connectWs]);
 
   const handleWsMessage = (data: WsMessage) => {
     switch (data.type) {
@@ -291,6 +348,31 @@ export const App: React.FC = () => {
     }
   };
 
+  // Mouse event dispatchers
+  const handleMouseMove = (dx: number, dy: number) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'mouse_move', dx, dy }));
+    }
+  };
+
+  const handleMouseClick = (button: 'left' | 'right') => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'mouse_click', button }));
+    }
+  };
+
+  const handleMouseScroll = (dy: number) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'mouse_scroll', dy }));
+    }
+  };
+
+  const handleKeyPress = (key: string) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'key_press', key }));
+    }
+  };
+
   return (
     <>
       <header className="app-header">
@@ -301,51 +383,23 @@ export const App: React.FC = () => {
         <ConnectionBadge state={connectionState} />
       </header>
 
-      {/* Mode Switcher on Mobile View */}
+      {/* 2 Clean Mobile Tabs: Keyboard & Trackpad */}
       {!isCompanionView && connectionState === 'paired' && (
-        <div style={{ display: 'flex', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)', justifyContent: 'center' }}>
+        <div className="mobile-tabs-header">
           <button
-            onClick={() => setMobileMode('voice')}
-            style={{
-              flex: 1,
-              maxWidth: '300px',
-              padding: '0.75rem',
-              background: 'none',
-              border: 'none',
-              borderBottom: mobileMode === 'voice' ? '2px solid var(--accent-cyan)' : '2px solid transparent',
-              color: mobileMode === 'voice' ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.45rem',
-              cursor: 'pointer'
-            }}
+            onClick={() => setMobileMode('keyboard')}
+            className={`tab-btn ${mobileMode === 'keyboard' ? 'active' : ''}`}
           >
-            <Mic size={16} />
-            <span>Voice Typing</span>
+            <KeyboardIcon size={18} />
+            <span>Keyboard</span>
           </button>
 
           <button
-            onClick={() => setMobileMode('clipboard')}
-            style={{
-              flex: 1,
-              maxWidth: '300px',
-              padding: '0.75rem',
-              background: 'none',
-              border: 'none',
-              borderBottom: mobileMode === 'clipboard' ? '2px solid var(--accent-cyan)' : '2px solid transparent',
-              color: mobileMode === 'clipboard' ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.45rem',
-              cursor: 'pointer'
-            }}
+            onClick={() => setMobileMode('trackpad')}
+            className={`tab-btn ${mobileMode === 'trackpad' ? 'active' : ''}`}
           >
-            <FileText size={16} />
-            <span>Clipboard (3000+ Lines)</span>
+            <MousePointer size={18} />
+            <span>Trackpad</span>
           </button>
         </div>
       )}
@@ -372,8 +426,8 @@ export const App: React.FC = () => {
             onInjectHistory={handleInjectHistory}
           />
         ) : connectionState === 'paired' ? (
-          mobileMode === 'voice' ? (
-            <MobileTyping
+          mobileMode === 'keyboard' ? (
+            <Keyboard
               onSendTextUpdate={sendTextUpdate}
               onPause={handlePause}
               onResume={handleResume}
@@ -381,14 +435,21 @@ export const App: React.FC = () => {
               onDisconnect={handleDisconnect}
               isPaused={isPaused}
               pcStatus={connectionState}
-            />
-          ) : (
-            <ClipboardTransfer
               onStartTransfer={handleStartTransfer}
               onSendChunk={handleSendChunk}
-              onControlTransfer={handleControlTransfer}
               activeProgress={activeTransfer}
               ackChunkIndex={ackChunkIndex}
+            />
+          ) : (
+            <MobileMouse
+              onMouseMove={handleMouseMove}
+              onMouseClick={handleMouseClick}
+              onMouseScroll={handleMouseScroll}
+              onKeyPress={handleKeyPress}
+              onPause={handlePause}
+              onResume={handleResume}
+              onDisconnect={handleDisconnect}
+              isPaused={isPaused}
             />
           )
         ) : (

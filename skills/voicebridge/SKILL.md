@@ -2,12 +2,12 @@
 name: voicebridge
 description: Start VoiceBridge server, display connection QR code and PIN, and fetch live voice dictation or clipboard transfers from connected phone.
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
 ---
 
 # VoiceBridge (/voicebridge)
 
-VoiceBridge connects your mobile phone to your AI coding IDE (Antigravity, Cursor, VS Code, Claude) with real-time Gboard voice typing, 3,000+ line chunked clipboard sync, and zero-latency Windows injection.
+VoiceBridge turns your mobile phone into a voice typing companion, virtual trackpad with PC sound volume control, and 3,000+ line chunked clipboard injector for AI coding IDEs (Antigravity, Cursor, VS Code, Claude).
 
 ## What to do when the user types `/voicebridge`:
 

@@ -1,5 +1,5 @@
 node_modules/
-dist/
+/dist/
 build/
 scratch/
 __pycache__/
@@ -7,4 +7,5 @@ __pycache__/
 .env
 .DS_Store
 *.log
+
 

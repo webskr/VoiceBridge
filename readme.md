@@ -1,27 +1,27 @@
 # 🎙️ VoiceBridge MCP Server
-> **Hardware-Accelerated Model Context Protocol (MCP) Server for AI Coding Environments**  
-> *Stream live phone voice dictation (Gboard/Keyboard mic) & transfer 3,000+ lines of code from mobile directly into Antigravity, Cursor, Claude Desktop, and VS Code.*
+> **Turn your mobile phone into an AI-powered Voice Typing Companion, Virtual Trackpad & 3,000+ line Clipboard Injector for AI IDEs.**  
+> *Stream live voice dictation (Gboard/Keyboard mic), control PC cursor & sound volume, and transfer large codebases directly into Antigravity, Cursor, Claude Desktop, and VS Code.*
 
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%202024--11--05%20%7C%202025--03--26-purple.svg)](https://modelcontextprotocol.io)
 [![Streamable HTTP](https://img.shields.io/badge/MCP%20URL-http%3A%2F%2F127.0.0.1%3A57890%2Fmcp-blue.svg)](http://127.0.0.1:57890/mcp)
 [![NPX Package](https://img.shields.io/badge/NPX-npx%20--y%20%40webskr%2Fvoicebridge-crimson.svg)](https://npmjs.com/package/@webskr/voicebridge)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6?style=flat&logo=windows)](https://github.com)
-[![Local Network](https://img.shields.io/badge/Network-100%25%20Local%20Wi--Fi-green.svg)](https://github.com)
-[![Bilingual](https://img.shields.io/badge/Voice-Hindi%20%7C%20English%20Unicode-orange.svg)](https://github.com)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6?style=flat&logo=windows)](https://github.com/webskr/hackthon)
+[![Local Network](https://img.shields.io/badge/Network-100%25%20Local%20Wi--Fi-green.svg)](https://github.com/webskr/hackthon)
+[![Bilingual](https://img.shields.io/badge/Voice-Hindi%20%7C%20English%20Unicode-orange.svg)](https://github.com/webskr/hackthon)
 
 ---
 
-## ⚡ 1-Click Automatic Setup (Recommended)
+## ⚡ 1-Click Automatic Setup
 
-Just run this single command in your terminal to automatically detect and configure **Google Antigravity, Cursor, Claude Desktop, and VS Code**, plus install the `/voicebridge` slash command:
+Run this single command in your terminal to automatically configure **Google Antigravity, Cursor, Claude Desktop, and VS Code**, and install the `/voicebridge` slash command:
 
 ```bash
 npx -y @webskr/voicebridge setup
 ```
 
-That's it! It automatically detects your installed IDEs, registers the MCP server, installs the Antigravity `/voicebridge` slash command, and opens your companion dashboard. Zero manual JSON editing!
+That's it! It automatically detects your installed IDEs, registers the MCP server configuration, and opens your companion dashboard. Zero manual JSON editing!
 
-### 🎯 Antigravity Slash Command: `/voicebridge`
+### 🎯 Slash Command: `/voicebridge`
 In Antigravity IDE, simply type:
 ```text
 /voicebridge
@@ -30,11 +30,24 @@ The agent immediately checks server health, displays your phone pairing QR code 
 
 ---
 
-## 🚀 100% Pure Node.js & Native Windows (No Python Required)
-VoiceBridge is built with zero Python or heavy runtime dependencies:
-- **Core Server**: Pure Node.js (`lib/server.js`) with HTTP, WebSockets, and chunked transfer.
-- **Native Injector**: 5.6 KB compiled Windows native binary (`bin/win_inject.exe`) utilizing `SendInput` Unicode typing and clipboard injection in under 10ms.
-- **Frontend Dashboard**: High-performance React companion app served directly at `http://localhost:57890/webskr/voice-bridge`.
+## ✨ Features & Capabilities
+
+### 1. ⌨️ Mobile Keyboard & Voice Typing
+* **Hands-Free AI Prompting**: Speak complex coding instructions, bug descriptions, or architecture plans using your phone's keyboard microphone (e.g. **Gboard**) while away from your desk.
+* **Continuous Typing**: Dictate without interruptions; auto-adapts to speech pauses without manual clearing.
+* **Docked Controls**: `Enter ↵`, `Pause`, `Clear`, and `Exit` buttons float directly above the virtual keyboard for quick single-tap actions.
+* **3k+ Lines Clipboard Transfer**: Integrated button to transfer up to 3,500+ lines of code, logs, or stack traces directly into Windows clipboard with CRC32 integrity.
+
+### 2. 🖱️ Virtual Trackpad & PC Sound Control
+* **Smooth Trackpad Surface**: Swipe 1 finger to move the PC mouse cursor with natural acceleration.
+* **Neon Footprint Trails**: Visual glowing trails trace your finger path in real time and smoothly fade out.
+* **Dual-Finger Gestures**: Swipe with 2 fingers to scroll pages up/down with simultaneous double-finger neon trails.
+* **Integrated Click Zones**: Horizontally divided bottom partition for dedicated **Left Click** and **Right Click** actions.
+* **PC Sound Volume Bar**: Control your computer's audio directly from your phone — **Mute**, **Vol -**, and **Vol +**.
+
+### 3. 🛡️ Resilient Mobile Connection
+* **Screen Wake-Lock**: Keeps your phone display active during dictation sessions.
+* **Auto-Resume**: Automatically restores dropped WebSocket connections when unlocking your phone or switching back to the browser tab without re-entering the PIN.
 
 ---
 
@@ -67,17 +80,6 @@ If you prefer to configure manually, choose either **Direct HTTP URL** or **NPX*
 
 ---
 
-## 🌟 What is VoiceBridge MCP?
-
-Traditional MCP servers only integrate with cloud APIs (GitHub, Slack, Notion). **VoiceBridge is a Local Hardware MCP Server** designed specifically for developer workflows:
-
-1. **Hands-Free AI Prompting:** Speak complex coding instructions, bug descriptions, or architecture plans using your phone's keyboard microphone (e.g. **Gboard**) while away from your desk. The AI agent reads your dictation directly via MCP.
-2. **High-Volume Mobile Code Ingestion:** Easily paste 2,000 to 3,500+ lines of code, logs, or stack traces on your phone and instruct your AI agent to inspect, refactor, or write them to workspace files.
-3. **Active Window Typing & Clipboard Control:** Instruct your AI assistant to type generated queries, commands, or code snippets directly into whichever desktop application currently has your active cursor (Notepad, VS Code, Chrome, Terminal, WhatsApp Desktop).
-4. **100% Private & Cloud-Free:** All audio processing happens on-device via your phone's keyboard engine; text moves strictly across your local Wi-Fi router or PC mobile hotspot. Zero external API calls.
-
----
-
 ## 🧰 Available MCP Tools Reference
 
 When connected, VoiceBridge exposes 5 native MCP tools to your AI agent:
@@ -91,7 +93,7 @@ Returns real-time server health, local Wi-Fi IP, active pairing PIN, connected m
 Fetches live voice text dictated on your phone's Gboard microphone in real time.
 - **Parameters:**
   - `reset_after_read` *(boolean, optional)*: Automatically resets the voice buffer after reading (default: `false`).
-- **Example Agent Prompt:** *"Read what I just dictated on my phone and turn it into a Python function."*
+- **Example Agent Prompt:** *"Read what I just dictated on my phone and turn it into a React component."*
 
 ### 3. `voicebridge_get_clipboard_transfers`
 Lists all large clipboard payloads transferred from the phone, or retrieves the full text of a specific 3,000+ line transfer.
@@ -114,79 +116,21 @@ Sets the Windows system clipboard and optionally triggers an immediate simulated
 
 ---
 
-## 📦 IDE Setup Guides
-
-### 1. Google Antigravity IDE
-VoiceBridge is already pre-configured in your workspace (`mcp_config.json`) and global config (`~/.gemini/config/mcp_config.json`).
-```json
-{
-  "mcpServers": {
-    "voicebridge": {
-      "url": "http://127.0.0.1:57890/mcp"
-    }
-  }
-}
-```
-
-### 2. Cursor IDE
-1. Open **Cursor Settings** (`Ctrl + ,`).
-2. Navigate to **Features** ➔ **MCP Servers** ➔ **Add New MCP Server**.
-3. Choose either:
-   - **Type:** `sse` / `url` ➔ **URL:** `http://127.0.0.1:57890/mcp`
-   - **Type:** `command` ➔ **Command:** `npx -y @webskr/voicebridge`
-4. Or save `.cursor/mcp.json` in your project root:
-```json
-{
-  "mcpServers": {
-    "voicebridge": {
-      "url": "http://127.0.0.1:57890/mcp"
-    }
-  }
-}
-```
-
-### 3. Claude Desktop
-Add VoiceBridge to your `%APPDATA%\Claude\claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "voicebridge": {
-      "command": "npx",
-      "args": ["-y", "@webskr/voicebridge"]
-    }
-  }
-}
-```
-
-### 4. VS Code (Cline / Roo Code / Continue)
-Add VoiceBridge to your extension's MCP configuration (e.g. `cline_mcp_settings.json`):
-```json
-{
-  "mcpServers": {
-    "voicebridge": {
-      "url": "http://127.0.0.1:57890/mcp"
-    }
-  }
-}
-```
-
----
-
 ## 📱 How to Connect Your Phone (Step-by-Step)
 
 ```
-[ Mobile Phone (Gboard / Mic) ]
-               │
-               ▼  WebSocket (Port 57890, PIN Auth)
+[ Mobile Phone (Gboard / Mic / Trackpad) ]
+                    │
+                    ▼  WebSocket (Port 57890, PIN Auth)
 [ Local Wi-Fi / Hotspot Network ]
-               │
-               ▼
-[ VoiceBridge MCP Server (Port 57890) ]
-  ├── Streamable HTTP Endpoint  ──> http://127.0.0.1:57890/mcp
-  ├── NPX Stdio Protocol        ──> npx voicebridge-mcp
-  └── Win32 Hardware Injection  ──> SendInput & CF_UNICODETEXT
-               │
-               ▼
+                    │
+                    ▼
+[ VoiceBridge Server & Native Win32 Subsystem ]
+      ├── Streamable HTTP Endpoint  ──> http://127.0.0.1:57890/mcp
+      ├── NPX Stdio Protocol        ──> npx @webskr/voicebridge
+      └── Win32 Hardware Injection  ──> SendInput, Mouse, Volume, & CF_UNICODETEXT
+                    │
+                    ▼
 [ AI IDE (Antigravity / Cursor / Claude / VS Code) ]
 ```
 
@@ -205,13 +149,9 @@ Add VoiceBridge to your extension's MCP configuration (e.g. `cline_mcp_settings.
 3. **Pair with PIN:**
    - Enter the 6-character PIN shown in your PC Dashboard (`http://localhost:57890/webskr/voice-bridge`) or provided by the agent.
 
-4. **Dictate or Transfer:**
-   - **Voice Typing:** Tap the microphone icon on your mobile Gboard and speak in Hindi or English.
-   - **Large Clipboard Transfer:** Paste up to 3,500+ lines of code and tap **Transfer**.
-
-5. **Talk to Your AI Agent:**
-   - *"VoiceBridge me jo text aaya hai usko analyze karo."*
-   - *"Create unit tests for the code sent from my phone clipboard."*
+4. **Dictate, Navigate or Transfer:**
+   - **Keyboard Tab:** Speak in Hindi or English using keyboard mic, or tap `3k+ Lines` to paste large codebases.
+   - **Trackpad Tab:** Swipe to move PC cursor, tap bottom halves for Left/Right click, and adjust PC sound volume.
 
 ---
 
@@ -241,7 +181,7 @@ http://127.0.0.1:57890/mcp
 In your IDE config, specify:
 ```json
 "command": "npx",
-"args": ["-y", "voicebridge-mcp"]
+"args": ["-y", "@webskr/voicebridge"]
 ```
 
 #### Q: Does it require an active Internet connection?

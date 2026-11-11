@@ -1,7 +1,7 @@
 {
   "name": "@webskr/voicebridge",
-  "version": "1.2.0",
-  "description": "Pure Node.js & Native Windows MCP Server: Stream phone voice dictation and 3000+ line clipboard into AI IDEs",
+  "version": "1.3.0",
+  "description": "Turn your mobile phone into an AI-powered Voice Typing Companion, Virtual Trackpad & 3,000+ line Clipboard Injector for AI IDEs",
   "main": "bin/cli.js",
   "bin": {
     "voicebridge": "bin/cli.js",
