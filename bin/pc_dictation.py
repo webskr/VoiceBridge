@@ -19,6 +19,7 @@ import re
 import queue
 from collections import deque
 import threading
+import concurrent.futures
 import argparse
 import urllib.request
 import winsound
@@ -27,6 +28,7 @@ from ctypes import wintypes
 import numpy as np
 import sounddevice as sd
 import speech_recognition as sr
+import speech_recognition.recognizers.google as sr_google
 import requests
 
 try:
@@ -34,6 +36,12 @@ try:
     KEYBOARD_AVAILABLE = True
 except ImportError:
     KEYBOARD_AVAILABLE = False
+
+try:
+    import faster_whisper
+    FASTER_WHISPER_AVAILABLE = True
+except ImportError:
+    FASTER_WHISPER_AVAILABLE = False
 
 # -------------------------------------------------------------
 # Developer Multi-Word Phrases & Common Expressions
@@ -412,6 +420,14 @@ COMMON_HINGLISH_WORDS = {
     'डॉक': 'doc', 'डॉक्स': 'docs',
     'गाइड': 'guide', 'ट्यूटोरियल': 'tutorial',
     'मैसेज': 'message', 'मैसेजेस': 'messages',
+    'सीक्रेट': 'secret', 'सीगरेट': 'secret', 'सिक्रेट': 'secret',
+    'डिटेक्टेड': 'detected',
+    'कॉम्बिनेशन': 'combination', 'कान्बिनेशन': 'combination', 'कम्बिनेशन': 'combination',
+    'डिप्लॉयमेंट': 'deployment', 'डिप्लॉयमेंट्स': 'deployments',
+    'प्रोडक्शन': 'production',
+    'वॉइस': 'voice', 'वाइस': 'voice',
+    'ब्रिज': 'bridge', 'ब्रीज': 'bridge',
+    'सिस्टम': 'system', 'सिटम': 'system',
 }
 
 # Phonetic Normalizer: Post-processes accidental mangled spelling into standard words
@@ -500,7 +516,16 @@ PHONETIC_NORMALIZER = {
     'ditekt': 'detect', 'ditekshan': 'detection',
     'vard': 'word', 'varda': 'word', 'vards': 'words',
     'inglish': 'english',
-    'laingvej': 'language', 'laingvejez': 'languages'
+    'laingvej': 'language', 'laingvejez': 'languages',
+    'sigaret': 'secret', 'seekret': 'secret', 'sikret': 'secret',
+    'ditekted': 'detected',
+    'kanbineshan': 'combination', 'kambineshan': 'combination',
+    'deployament': 'deployment', 'diployament': 'deployment',
+    'prodakshan': 'production',
+    'vois': 'voice', 'brij': 'bridge',
+    'sistam': 'system',
+    'maisej': 'message',
+    'sho': 'show'
 }
 
 # Phonetic character mapping for words not found in dictionary
@@ -700,8 +725,9 @@ BLOCK_SIZE = 1600          # 100ms per block
 PAUSE_BLOCKS = 4           # 4 blocks = 400ms silence (fast responsive trigger!)
 PRE_ROLL_BLOCKS = 3        # Keeps preceding 300ms so initial syllables are never lost
 
-GOOGLE_KEY = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw"
-GOOGLE_URL = f"https://www.google.com/speech-api/v2/recognize?client=chromium&key={GOOGLE_KEY}&lang=hi-IN&maxresults=1"
+def get_google_speech_url(lang="hi-IN"):
+    builder = sr_google.create_request_builder(endpoint=sr_google.ENDPOINT, language=lang)
+    return builder.build_url()
 
 class ContinuousPCDictation:
     def __init__(self, hotkey="ctrl+alt+v", lang="hi-IN", format_mode="hinglish", server_url="http://127.0.0.1:57890", groq_key=None):
@@ -710,6 +736,14 @@ class ContinuousPCDictation:
         self.format_mode = format_mode
         self.server_url = server_url.rstrip("/")
         self.groq_key = groq_key or os.environ.get("GROQ_API_KEY")
+
+        # Local neural bilingual Whisper engine
+        self.whisper_model = None
+        if FASTER_WHISPER_AVAILABLE:
+            try:
+                self.whisper_model = faster_whisper.WhisperModel("tiny", device="cpu", compute_type="int8")
+            except Exception:
+                self.whisper_model = None
 
         self.is_active = False
         self.stream = None
@@ -871,26 +905,15 @@ class ContinuousPCDictation:
 
             self.transcription_queue.task_done()
 
-    def _transcribe_fast(self, audio_array):
-        if self.groq_key:
-            try:
-                t = self._transcribe_groq(audio_array.tobytes())
-                if t:
-                    return t
-            except Exception:
-                pass
-
+    def _query_google_stream(self, flac_bytes, lang):
         try:
-            audio_data = sr.AudioData(audio_array.tobytes(), SAMPLE_RATE, 2)
-            flac_bytes = audio_data.get_flac_data()
-
+            url = get_google_speech_url(lang)
             resp = self.http_session.post(
-                GOOGLE_URL,
+                url,
                 data=flac_bytes,
                 headers={"Content-Type": "audio/x-flac; rate=16000"},
-                timeout=3.5
+                timeout=3.0
             )
-
             for line in resp.text.splitlines():
                 line = line.strip()
                 if not line:
@@ -904,12 +927,64 @@ class ContinuousPCDictation:
                             return alt[0].get("transcript", "")
                 except Exception:
                     pass
-        except Exception as e:
+        except Exception:
+            pass
+        return None
+
+    def _transcribe_fast(self, audio_array):
+        # 1. Local Neural Bilingual AI Engine (Whisper INT8 CPU - 0 internet, 0 keys, bilingual code-switching)
+        if self.whisper_model:
             try:
-                audio_data = sr.AudioData(audio_array.tobytes(), SAMPLE_RATE, 2)
-                return sr.Recognizer().recognize_google(audio_data, language=self.lang)
+                float_audio = (audio_array.astype(np.float32) / 32768.0).flatten()
+                segments, info = self.whisper_model.transcribe(
+                    float_audio,
+                    beam_size=1,
+                    initial_prompt="Secret detected in VoiceBridge. Deployment production check karo. Bhai ek login function bana do. Ctrl + Alt + V dabaiye."
+                )
+                text = " ".join(seg.text for seg in segments).strip()
+                if text:
+                    return text
             except Exception:
                 pass
+
+        # 2. Cloud Groq Whisper (Optional API Key)
+        if self.groq_key:
+            try:
+                t = self._transcribe_groq(audio_array.tobytes())
+                if t:
+                    return t
+            except Exception:
+                pass
+
+        # 3. Dual-Stream Google Cloud Speech API (Concurrent en-IN + hi-IN)
+        try:
+            audio_data = sr.AudioData(audio_array.tobytes(), SAMPLE_RATE, 2)
+            flac_bytes = audio_data.get_flac_data()
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                fut_hi = executor.submit(self._query_google_stream, flac_bytes, "hi-IN")
+                fut_en = executor.submit(self._query_google_stream, flac_bytes, "en-IN")
+                text_hi = fut_hi.result()
+                text_en = fut_en.result()
+
+            if text_en and text_en.strip():
+                en_clean = text_en.strip()
+                if not text_hi:
+                    return en_clean
+                # Check if user spoke primarily English or technical terms
+                words_en = set(re.findall(r'[a-zA-Z]{3,}', en_clean.lower()))
+                keywords = {'secret', 'detect', 'detected', 'deployment', 'deployments', 'production', 'voice', 'bridge', 'combination', 'readme', 'change', 'push', 'login', 'function', 'antigravity', 'vscode', 'terminal', 'system'}
+                if len(words_en) >= 2 or any(k in en_clean.lower() for k in keywords):
+                    return en_clean
+
+            if text_hi and text_hi.strip():
+                return text_hi.strip()
+
+            if text_en and text_en.strip():
+                return text_en.strip()
+
+        except Exception:
+            pass
 
         return None
 
