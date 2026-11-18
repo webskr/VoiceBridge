@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Monitor, Smartphone, Pause, Play, Trash2, LogOut, Activity, Info, Copy, FileText, Check, Power, Clock, CheckCircle2, QrCode } from 'lucide-react';
+import { Monitor, Smartphone, Pause, Play, Trash2, LogOut, Activity, Info, Copy, FileText, Check, Power, Clock, CheckCircle2, QrCode, Mic } from 'lucide-react';
 import { ConnectionBadge } from './ConnectionBadge';
 import { ConnectionState, TransferProgress, HistoryItem } from '../types';
 
@@ -256,6 +256,32 @@ export const PcCompanion: React.FC<PcCompanionProps> = ({
 
         {/* Sidebar Status & Diagnostics */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Direct PC Voice Dictation Card */}
+          <div className="stats-card" style={{ border: '1px solid rgba(56, 189, 248, 0.4)', background: 'linear-gradient(135deg, rgba(19, 27, 46, 0.95), rgba(56, 189, 248, 0.08))' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <Mic size={18} color="var(--accent-cyan)" />
+              <span>PC Direct Voice (Zero Phone)</span>
+            </h3>
+
+            <div style={{ margin: '0.75rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              Press the global Windows shortcut anywhere to speak and type:
+              <div style={{ marginTop: '0.5rem', background: 'var(--bg-input)', padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Global Hotkey:</span>
+                <kbd style={{ background: 'var(--accent-cyan)', color: '#090d16', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 700, fontSize: '0.85rem' }}>Ctrl + Alt + V</kbd>
+              </div>
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: '1.5' }}>
+              • Works in VS Code, Antigravity, Notepad, Browser<br />
+              • Hindi, Hinglish & English mixed speech supported<br />
+              • Browser open hona bilkul zaroori nahi hai
+            </div>
+
+            <div style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--accent-cyan)', fontFamily: 'monospace' }}>
+              Command: npm run pc-voice
+            </div>
+          </div>
+
           {/* QR Code Pairing Scanner Card */}
           <div className="stats-card" style={{ textAlign: 'center' }}>
             <h3 style={{ fontSize: '1rem', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem' }}>

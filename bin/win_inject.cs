@@ -50,6 +50,12 @@ class WinInject {
     const uint MOUSEEVENTF_WHEEL = 0x0800;
 
     [DllImport("user32.dll", SetLastError = true)]
+    static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    static extern bool SetThreadDesktop(IntPtr hDesktop);
+
+    [DllImport("user32.dll", SetLastError = true)]
     static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
     [DllImport("user32.dll")]
@@ -80,6 +86,17 @@ class WinInject {
     public static void Main(string[] args) {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.InputEncoding = System.Text.Encoding.UTF8;
+
+        try {
+            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x10000000 /* GENERIC_ALL */);
+            if (hDesk == IntPtr.Zero) {
+                hDesk = OpenDesktop("Default", 0, false, 0x01FF /* DESKTOP_ALL_ACCESS */);
+            }
+            if (hDesk != IntPtr.Zero) {
+                SetThreadDesktop(hDesk);
+            }
+        } catch {}
+
         string line;
         while ((line = Console.ReadLine()) != null) {
             if (line.StartsWith("TYPE:")) {

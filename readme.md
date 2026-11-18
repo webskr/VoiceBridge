@@ -1,13 +1,13 @@
 # 🎙️ VoiceBridge MCP Server
-> **Turn your mobile phone into an AI-powered Voice Typing Companion, Virtual Trackpad & 3,000+ line Clipboard Injector for AI IDEs.**  
-> *Stream live voice dictation (Gboard/Keyboard mic), control PC cursor & sound volume, and transfer large codebases directly into Antigravity, Cursor, Claude Desktop, and VS Code.*
+> **The All-in-One Voice Dictation & AI Input Companion for Developers.**  
+> *Direct PC Microphone Voice Typing with Global Hotkey, Smart Hinglish Developer Chat Engine, Mobile Phone Companion, Virtual Trackpad & 3,000+ Line Clipboard Injector for Google Antigravity, Cursor, Claude Desktop, and VS Code.*
 
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%202024--11--05%20%7C%202025--03--26-purple.svg)](https://modelcontextprotocol.io)
 [![Streamable HTTP](https://img.shields.io/badge/MCP%20URL-http%3A%2F%2F127.0.0.1%3A57890%2Fmcp-blue.svg)](http://127.0.0.1:57890/mcp)
 [![NPX Package](https://img.shields.io/badge/NPX-npx%20--y%20%40webskr%2Fvoicebridge-crimson.svg)](https://npmjs.com/package/@webskr/voicebridge)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D6?style=flat&logo=windows)](https://github.com/webskr/hackthon)
-[![Local Network](https://img.shields.io/badge/Network-100%25%20Local%20Wi--Fi-green.svg)](https://github.com/webskr/hackthon)
-[![Bilingual](https://img.shields.io/badge/Voice-Hindi%20%7C%20English%20Unicode-orange.svg)](https://github.com/webskr/hackthon)
+[![Direct PC Voice](https://img.shields.io/badge/PC%20Voice-Ctrl%20%2B%20Alt%20%2B%20V-success.svg)](https://github.com/webskr/hackthon)
+[![Smart Hinglish](https://img.shields.io/badge/NLP%20Engine-700%2B%20Dev%20Words-orange.svg)](https://github.com/webskr/hackthon)
 
 ---
 
@@ -30,32 +30,67 @@ The agent immediately checks server health, displays your phone pairing QR code 
 
 ---
 
-## ✨ Features & Capabilities
+## ✨ Features & Dual Modes
 
-### 1. ⌨️ Mobile Keyboard & Voice Typing
-* **Hands-Free AI Prompting**: Speak complex coding instructions, bug descriptions, or architecture plans using your phone's keyboard microphone (e.g. **Gboard**) while away from your desk.
-* **Continuous Typing**: Dictate without interruptions; auto-adapts to speech pauses without manual clearing.
-* **Docked Controls**: `Enter ↵`, `Pause`, `Clear`, and `Exit` buttons float directly above the virtual keyboard for quick single-tap actions.
-* **3k+ Lines Clipboard Transfer**: Integrated button to transfer up to 3,500+ lines of code, logs, or stack traces directly into Windows clipboard with CRC32 integrity.
+VoiceBridge gives you **two powerful ways** to dictate code and control your PC:
 
-### 2. 🖱️ Virtual Trackpad & PC Sound Control
-* **Smooth Trackpad Surface**: Swipe 1 finger to move the PC mouse cursor with natural acceleration.
-* **Neon Footprint Trails**: Visual glowing trails trace your finger path in real time and smoothly fade out.
-* **Dual-Finger Gestures**: Swipe with 2 fingers to scroll pages up/down with simultaneous double-finger neon trails.
-* **Integrated Click Zones**: Horizontally divided bottom partition for dedicated **Left Click** and **Right Click** actions.
-* **PC Sound Volume Bar**: Control your computer's audio directly from your phone — **Mute**, **Vol -**, and **Vol +**.
+### Mode 1: 🎙️ Direct PC Voice Dictation (Zero Phone Needed)
+Speak directly into your PC's microphone (desktop mic, laptop mic, or headset) without needing your phone or keeping a browser tab open:
+* **Global Shortcut Key (`Ctrl + Alt + V`)**: Press once from **any application on Windows** (VS Code, Antigravity, Notepad, Chrome, Slack, Discord) and speak naturally.
+* **Smart Hinglish & Developer NLP Normalizer (700+ Terms)**: Automatically converts spoken Hindi & Hinglish into natural chat language with developer precision:
+  * *"ek login function bana do"* ➔ Types: `ek login function bana do`
+  * *"readme file change karo abhi push mat karna"* ➔ Types: `readme file change karo abhi push mat karna`
+  * *"bro ek kaam karo"* ➔ Accurately typed as `bro` (never mistranscribed as `bra` or `kalee`)!
+  * Technical shortcuts: *"ctrl plus alt plus v"* ➔ Types: `ctrl + alt + v`
+* **100% Clipboard-Safe Keystroke Injection**: Uses pure Windows native `user32.SendInput` Unicode events. Your Windows clipboard is **never modified or overwritten**.
+* **Ultra-Fast 400ms Pause Detection & Connection Pooling**: Employs HTTP keep-alive connection pooling to eliminate TLS handshake latency and triggers typing instantly upon brief speech pauses.
+* **1-Click Windows Launchers**:
+  * Double-click `VoiceBridge-PC-Voice.bat` for instant console execution.
+  * Double-click `VoiceBridge-Silent.vbs` to run silently in the background with zero terminal window!
 
-### 3. 🛡️ Resilient Mobile Connection
-* **Screen Wake-Lock**: Keeps your phone display active during dictation sessions.
-* **Auto-Resume**: Automatically restores dropped WebSocket connections when unlocking your phone or switching back to the browser tab without re-entering the PIN.
+---
+
+### Mode 2: 📱 Mobile Companion (Wireless over Wi-Fi)
+Turn your phone into a remote wireless microphone, touchpad, and clipboard bridge:
+* **Mobile Keyboard & Gboard Dictation**: Use your mobile phone's keyboard microphone to dictate prompts hands-free while away from your desk.
+* **Virtual Trackpad & Gesture Scrolling**:
+  * 1-finger swipe for smooth mouse cursor navigation with neon footprint trails.
+  * 2-finger scroll up/down with dual-finger visual neon trails.
+  * Dedicated split zones for Left Click and Right Click.
+* **PC Sound Volume Bar**: Adjust computer audio (`Mute`, `Vol -`, `Vol +`) directly from your phone.
+* **3,000+ Lines Clipboard Injector**: Transfer massive code files, logs, or stack traces directly into Windows clipboard in 0.03s with CRC32 integrity check.
+
+---
+
+## 🚀 Quick Start Guide
+
+### Option A: Using Direct PC Voice Dictation
+1. Run in terminal:
+   ```bash
+   npm run pc-voice
+   ```
+   *Or double-click `bin/VoiceBridge-PC-Voice.bat` in File Explorer.*
+2. Switch to any app (VS Code, Notepad, Antigravity) and press **`Ctrl + Alt + V`**.
+3. Speak normally — text is typed instantly right at your blinking cursor! Press `Ctrl + Alt + V` again to turn off the mic.
+
+### Option B: Using Mobile Phone Companion
+1. Start the VoiceBridge server:
+   ```bash
+   npx -y @webskr/voicebridge start
+   ```
+2. Open the **PC Companion Dashboard**:
+   ```text
+   http://localhost:57890/webskr/voice-bridge
+   ```
+3. Connect your phone to the same Wi-Fi and open `http://<YOUR_PC_IP>:57890`. Enter the 6-character PIN to start dictating or using the trackpad!
 
 ---
 
 ## 🔌 Manual MCP Configuration (URL & NPX)
 
-If you prefer to configure manually, choose either **Direct HTTP URL** or **NPX**:
+If you prefer to configure manually in your AI IDE (`settings.json` or `claude_desktop_config.json`):
 
-### Option 1: Direct MCP Streamable HTTP URL
+### Option 1: Direct MCP Streamable HTTP URL (Recommended)
 ```json
 {
   "mcpServers": {
@@ -82,76 +117,15 @@ If you prefer to configure manually, choose either **Direct HTTP URL** or **NPX*
 
 ## 🧰 Available MCP Tools Reference
 
-When connected, VoiceBridge exposes 5 native MCP tools to your AI agent:
+VoiceBridge exposes 5 native MCP tools to your AI agent:
 
-### 1. `voicebridge_status`
-Returns real-time server health, local Wi-Fi IP, active pairing PIN, connected mobile state, and buffer length.
-- **Parameters:** *None*
-- **Example Agent Prompt:** *"Check VoiceBridge status and give me the phone pairing PIN."*
-
-### 2. `voicebridge_get_live_voice`
-Fetches live voice text dictated on your phone's Gboard microphone in real time.
-- **Parameters:**
-  - `reset_after_read` *(boolean, optional)*: Automatically resets the voice buffer after reading (default: `false`).
-- **Example Agent Prompt:** *"Read what I just dictated on my phone and turn it into a React component."*
-
-### 3. `voicebridge_get_clipboard_transfers`
-Lists all large clipboard payloads transferred from the phone, or retrieves the full text of a specific 3,000+ line transfer.
-- **Parameters:**
-  - `transfer_id` *(string, optional)*: Specific transfer ID. If omitted, returns recent transfer history.
-- **Example Agent Prompt:** *"Fetch the 3,000-line code file sent from my phone and save it to `utils.py`."*
-
-### 4. `voicebridge_type_text`
-Injects text directly into whichever desktop window currently has active cursor focus on Windows using native `SendInput` Unicode injection.
-- **Parameters:**
-  - `text` *(string, required)*: Text string to type.
-- **Example Agent Prompt:** *"Type this SQL select query into my active database window."*
-
-### 5. `voicebridge_set_clipboard`
-Sets the Windows system clipboard and optionally triggers an immediate simulated `Ctrl+V` keystroke.
-- **Parameters:**
-  - `text` *(string, required)*: Text to copy to clipboard.
-  - `auto_paste` *(boolean, optional)*: Whether to press `Ctrl+V` automatically (default: `false`).
-- **Example Agent Prompt:** *"Copy the generated API response to my Windows clipboard and paste it."*
-
----
-
-## 📱 How to Connect Your Phone (Step-by-Step)
-
-```
-[ Mobile Phone (Gboard / Mic / Trackpad) ]
-                    │
-                    ▼  WebSocket (Port 57890, PIN Auth)
-[ Local Wi-Fi / Hotspot Network ]
-                    │
-                    ▼
-[ VoiceBridge Server & Native Win32 Subsystem ]
-      ├── Streamable HTTP Endpoint  ──> http://127.0.0.1:57890/mcp
-      ├── NPX Stdio Protocol        ──> npx @webskr/voicebridge
-      └── Win32 Hardware Injection  ──> SendInput, Mouse, Volume, & CF_UNICODETEXT
-                    │
-                    ▼
-[ AI IDE (Antigravity / Cursor / Claude / VS Code) ]
-```
-
-1. **Start Your IDE or Run Setup:**
-   - Run `npx -y @webskr/voicebridge setup` (automatically configures your IDE and opens the dashboard).
-   - **PC Dashboard URL:** `http://localhost:57890/webskr/voice-bridge`
-
-2. **Open the Mobile Interface:**
-   - Connect your phone to the same Wi-Fi router or PC mobile hotspot.
-   - Point your phone's browser to:
-     ```text
-     http://<YOUR_PC_IP>:57890
-     ```
-   - *(Tip: Ask your AI agent "What is my VoiceBridge pairing URL and PIN?" to get the link instantly).*
-
-3. **Pair with PIN:**
-   - Enter the 6-character PIN shown in your PC Dashboard (`http://localhost:57890/webskr/voice-bridge`) or provided by the agent.
-
-4. **Dictate, Navigate or Transfer:**
-   - **Keyboard Tab:** Speak in Hindi or English using keyboard mic, or tap `3k+ Lines` to paste large codebases.
-   - **Trackpad Tab:** Swipe to move PC cursor, tap bottom halves for Left/Right click, and adjust PC sound volume.
+| MCP Tool | Description | Example Agent Prompt |
+|---|---|---|
+| `voicebridge_status` | Returns server health, IP, active PIN, connected devices, and buffer state. | *"Check VoiceBridge status and give me the phone pairing PIN."* |
+| `voicebridge_get_live_voice` | Fetches live voice text dictated either from the PC mic or mobile phone. | *"Read what I just dictated and turn it into a React component."* |
+| `voicebridge_get_clipboard_transfers` | Retrieves large 3,000+ line code payloads transferred from mobile. | *"Fetch the 3,000-line code file sent from my phone and save to utils.py."* |
+| `voicebridge_type_text` | Injects text directly into whichever desktop window has cursor focus using `SendInput`. | *"Type this SQL select query into my active database window."* |
+| `voicebridge_set_clipboard` | Copies text to Windows system clipboard with optional auto `Ctrl+V` paste. | *"Copy the generated API response to my Windows clipboard."* |
 
 ---
 
@@ -164,31 +138,25 @@ VoiceBridge runs as an ultra-lightweight async service using native Win32 APIs:
 | **Memory / RAM** | **~24 MB to 28 MB** | Less than a single empty browser tab |
 | **CPU Usage (Idle)** | **0.0%** | Zero background CPU drain |
 | **CPU Usage (Active)** | **< 0.2%** | Negligible impact even during heavy compilation |
-| **Internet Data** | **0 KB/s** | 100% offline local network communication |
+| **Typing Latency** | **~400ms pause trigger** | Instant response with keep-alive HTTP pooling |
+| **Clipboard Safety** | **100% Keystroke Injection** | Zero clipboard overwrites or race conditions |
 | **3,500+ Line Transfer** | **0.03 seconds** | 11,800 KB/s chunked transfer with CRC32 integrity |
 
 ---
 
 ## ❓ Frequently Asked Questions (FAQ)
 
-#### Q: Where is the MCP URL to add to my IDE?
-The Streamable HTTP MCP URL is:
-```text
-http://127.0.0.1:57890/mcp
-```
+#### Q: Do I need a mobile phone to use VoiceBridge?
+**No!** You can use **Direct PC Voice Dictation** entirely on your computer using your PC's mic and the global hotkey `Ctrl + Alt + V`. The mobile phone interface is an optional companion for when you are away from your desk.
 
-#### Q: How do I run it via NPX without git cloning?
-In your IDE config, specify:
-```json
-"command": "npx",
-"args": ["-y", "@webskr/voicebridge"]
-```
+#### Q: Does typing overwrite my copied text in the Windows clipboard?
+**No.** VoiceBridge uses direct native Windows `SendInput` keystrokes with `KEYEVENTF_UNICODE`. It never touches or overwrites your Windows clipboard.
 
-#### Q: Does it require an active Internet connection?
-**No.** VoiceBridge operates 100% locally over Wi-Fi or PC mobile hotspot. No audio, prompt, or code ever leaves your local network.
+#### Q: Can I speak in Hindi and English together (Hinglish)?
+**Yes.** VoiceBridge includes a dedicated NLP normalization engine with over 700+ coding, technical, and conversational Indian terms (`bro`, `readme`, `change`, `detect`, `important`, `copy`, `login`, `api`, `vs code`, `antigravity`).
 
-#### Q: Does it support both Hindi and English?
-**Yes.** VoiceBridge has complete native UTF-16 Unicode support for Devanagari Hindi (`नमस्ते दुनिया`) as well as English punctuation, numerals, and emojis.
+#### Q: Does it require an active Internet connection for local features?
+VoiceBridge server, trackpad, mouse controls, volume bars, and 3k+ line clipboard transfers work **100% locally offline over Wi-Fi**. Voice dictation uses lightweight connection-pooled speech recognition.
 
 ---
 

@@ -506,6 +506,14 @@ async function main() {
     return;
   }
 
+  if (args.includes('pc-voice') || args.includes('pc-mic') || args.includes('dictation')) {
+    await ensureBackendRunning();
+    const pythonScript = path.join(__dirname, 'pc_dictation.py');
+    const child = spawn('python', [pythonScript, ...args.filter(a => !['pc-voice', 'pc-mic', 'dictation'].includes(a))], { stdio: 'inherit' });
+    child.on('exit', code => process.exit(code || 0));
+    return;
+  }
+
   if (args.includes('status')) {
     const running = await isServerRunning();
     if (!running) {

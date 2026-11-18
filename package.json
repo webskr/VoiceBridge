@@ -34,7 +34,8 @@
     "start": "node bin/cli.js",
     "setup": "node bin/cli.js setup",
     "dev": "npm --prefix web run dev",
-    "build": "npm --prefix web run build"
+    "build": "npm --prefix web run build",
+    "pc-voice": "node bin/cli.js pc-voice"
   },
   "dependencies": {
     "qrcode": "^1.5.4",
