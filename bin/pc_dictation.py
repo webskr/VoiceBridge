@@ -623,7 +623,7 @@ def deduplicate_phrase(text):
     return text
 
 def to_hinglish(text):
-    out = text
+    out = text.replace('।', '.').replace('॥', '.')
 
     # Phase 1: Multi-word technical and shortcut phrases
     for hindi_p, eng_p in DEV_PHRASES:
@@ -648,6 +648,7 @@ def to_hinglish(text):
     joined = " ".join(fixed)
     joined = re.sub(r'\banti\s+gravity\b', 'antigravity', joined, flags=re.IGNORECASE)
     joined = re.sub(r'\bctrl\s*\+\s*alt\s*\+\s*v\b', 'ctrl + alt + v', joined, flags=re.IGNORECASE)
+    joined = re.sub(r'\bcontrol\s+alt\s+of\s+usb\b', 'ctrl + alt + v', joined, flags=re.IGNORECASE)
     return deduplicate_phrase(joined)
 
 # -------------------------------------------------------------
@@ -737,13 +738,16 @@ class ContinuousPCDictation:
         self.server_url = server_url.rstrip("/")
         self.groq_key = groq_key or os.environ.get("GROQ_API_KEY")
 
-        # Local neural bilingual Whisper engine
+        # Local neural bilingual Whisper engine (Base model with Hindi Hinglish prompt & beam_size=5)
         self.whisper_model = None
         if FASTER_WHISPER_AVAILABLE:
-            try:
-                self.whisper_model = faster_whisper.WhisperModel("tiny", device="cpu", compute_type="int8")
-            except Exception:
-                self.whisper_model = None
+            for m_size in ["base", "tiny"]:
+                try:
+                    self.whisper_model = faster_whisper.WhisperModel(m_size, device="cpu", compute_type="int8")
+                    print(f"[PC Voice] Local AI Whisper ({m_size}) loaded with beam_size=5 & Hinglish prompt conditioning!")
+                    break
+                except Exception:
+                    continue
 
         self.is_active = False
         self.stream = None
@@ -964,7 +968,25 @@ class ContinuousPCDictation:
         return any(h in lower for h in hallucinations)
 
     def _transcribe_fast(self, audio_array):
-        # 1. Dual-Stream Google Cloud Speech API (Ultra-accurate, 0 hallucinations, concurrent en-IN + hi-IN)
+        # 1. Local Neural Bilingual AI Engine (Whisper Base + Hindi Language Fix + Hinglish Sample Prompt + Beam 5 + VAD)
+        if self.whisper_model:
+            try:
+                float_audio = (audio_array.astype(np.float32) / 32768.0).flatten()
+                segments, info = self.whisper_model.transcribe(
+                    float_audio,
+                    language="hi",
+                    initial_prompt="आज मैंने code commit किया और GitHub पर push किया। Supabase में deploy कर दिया, React Native का build भी चल रहा है। Ctrl + Alt + V दबाकर voice typing ऑन करो।",
+                    beam_size=5,
+                    vad_filter=True,
+                    no_speech_threshold=0.6
+                )
+                text = " ".join(seg.text for seg in segments).strip()
+                if text and not self._is_hallucination(text):
+                    return text
+            except Exception:
+                pass
+
+        # 2. Dual-Stream Google Cloud Speech API (Fallback, concurrent en-IN + hi-IN)
         try:
             audio_data = sr.AudioData(audio_array.tobytes(), SAMPLE_RATE, 2)
             flac_bytes = audio_data.get_flac_data()
@@ -980,9 +1002,8 @@ class ContinuousPCDictation:
                 if not text_hi:
                     if not self._is_hallucination(en_clean):
                         return en_clean
-                # Check if user spoke primarily English or technical terms
                 words_en = set(re.findall(r'[a-zA-Z]{3,}', en_clean.lower()))
-                keywords = {'secret', 'detect', 'detected', 'deployment', 'deployments', 'production', 'voice', 'bridge', 'voicebridge', 'combination', 'readme', 'change', 'push', 'login', 'function', 'antigravity', 'vscode', 'terminal', 'system', 'skill', 'update', 'install'}
+                keywords = {'secret', 'detect', 'detected', 'deployment', 'deployments', 'production', 'voice', 'bridge', 'voicebridge', 'combination', 'readme', 'change', 'push', 'login', 'function', 'antigravity', 'vscode', 'terminal', 'system', 'skill', 'update', 'install', 'commit', 'github'}
                 if len(words_en) >= 2 or any(k in en_clean.lower() for k in keywords):
                     if not self._is_hallucination(en_clean):
                         return en_clean
@@ -997,22 +1018,6 @@ class ContinuousPCDictation:
 
         except Exception:
             pass
-
-        # 2. Local Neural Whisper (Fallback if offline, with strict Silero VAD)
-        if self.whisper_model:
-            try:
-                float_audio = (audio_array.astype(np.float32) / 32768.0).flatten()
-                segments, info = self.whisper_model.transcribe(
-                    float_audio,
-                    beam_size=1,
-                    vad_filter=True,
-                    no_speech_threshold=0.65
-                )
-                text = " ".join(seg.text for seg in segments).strip()
-                if text and not self._is_hallucination(text):
-                    return text
-            except Exception:
-                pass
 
         # 3. Cloud Groq Whisper (Optional API Key)
         if self.groq_key:
