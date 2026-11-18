@@ -170,7 +170,7 @@ async function handleToolCall(name, args = {}) {
       if (inProcessServer) {
         const info = {
           service: 'VoiceBridge Windows Agent (Pure Node.js)',
-          version: '1.2.0',
+          version: '1.3.0',
           host: inProcessServer.host,
           port: inProcessServer.port,
           pin: inProcessServer.pin,
@@ -308,7 +308,7 @@ async function processMessage(msg) {
         capabilities: { tools: {} },
         serverInfo: {
           name: 'voicebridge-mcp',
-          version: '1.2.0'
+          version: '1.3.0'
         }
       }
     };
@@ -446,7 +446,7 @@ async function runSetup() {
 name: voicebridge
 description: Start VoiceBridge server, display connection QR code and PIN, and fetch live voice dictation or clipboard transfers from connected phone.
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
 ---
 
 # VoiceBridge (/voicebridge)

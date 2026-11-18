@@ -747,7 +747,8 @@ class ContinuousPCDictation:
 
         self.is_active = False
         self.stream = None
-        self.energy_threshold = 110.0
+        self.energy_threshold = 260.0
+        self.voice_blocks = 0
 
         self.pre_roll = deque(maxlen=PRE_ROLL_BLOCKS)
         self.current_utterance = []
@@ -763,14 +764,15 @@ class ContinuousPCDictation:
 
     def calibrate_noise(self):
         try:
-            print("[PC Voice] Calibrating microphone sensitivity...")
-            test_data = sd.rec(int(0.3 * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype='int16')
+            print("[PC Voice] Calibrating microphone (0.5s room noise check)...")
+            test_data = sd.rec(int(0.5 * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype='int16')
             sd.wait()
             floor = np.sqrt(np.mean(test_data.astype(np.float32)**2))
-            self.energy_threshold = max(90.0, floor * 1.35)
-            print(f"[PC Voice] Calibrated! Noise floor: {floor:.1f} RMS -> Sensitivity: {self.energy_threshold:.1f} RMS")
+            # Speech is typically 2.5x - 3.5x higher than ambient floor
+            self.energy_threshold = max(240.0, floor * 2.4)
+            print(f"[PC Voice] Calibrated! Ambient floor: {floor:.1f} RMS -> Speech trigger threshold: {self.energy_threshold:.1f} RMS")
         except Exception:
-            self.energy_threshold = 110.0
+            self.energy_threshold = 260.0
 
     def play_sound(self, kind):
         try:
@@ -797,14 +799,15 @@ class ContinuousPCDictation:
             self.current_utterance = []
             self.pre_roll.clear()
             self.is_speaking = False
+            self.voice_blocks = 0
             self.silence_count = 0
 
         self.calibrate_noise()
         self.play_sound("start")
 
         print("\n" + "=" * 65)
-        print("🎙️ [PC Mic ACTIVE - Fast Responsive Mode ON]")
-        print("👉 Normal aawaz me boliye (mic sensitive hai, chillane ki zaroorat nahi).")
+        print("🎙️ [PC Mic ACTIVE - Intelligent Voice Activity Mode]")
+        print("👉 Normal aawaz me boliye. Chup rahne par listening trigger nahi hogi.")
         print(f"👉 Har pause (~400ms) par text instant type ho jayega.")
         print(f"👉 Mic OPEN rahega jab tak aap dobara [{self.hotkey.upper()}] nahi dabate.")
         print("=" * 65 + "\n")
@@ -818,20 +821,28 @@ class ContinuousPCDictation:
 
             with self.lock:
                 if rms > self.energy_threshold:
-                    if not self.is_speaking:
-                        self.is_speaking = True
-                        for past_block in self.pre_roll:
-                            self.current_utterance.append(past_block)
-                    self.current_utterance.append(data_copy)
-                    self.silence_count = 0
+                    self.voice_blocks += 1
+                    # Confirm at least 2 consecutive voice frames (200ms) to ignore breathing or noise clicks
+                    if self.voice_blocks >= 2:
+                        if not self.is_speaking:
+                            self.is_speaking = True
+                            for past_block in self.pre_roll:
+                                self.current_utterance.append(past_block)
+                        self.current_utterance.append(data_copy)
+                        self.silence_count = 0
                 else:
+                    self.voice_blocks = 0
                     if self.is_speaking:
                         self.current_utterance.append(data_copy)
                         self.silence_count += 1
 
                         if self.silence_count >= PAUSE_BLOCKS:
-                            utterance_data = np.concatenate(self.current_utterance, axis=0)
-                            self.transcription_queue.put(utterance_data)
+                            # Only queue if utterance has at least 4 blocks (400ms) of real speech
+                            if len(self.current_utterance) >= 4:
+                                utterance_data = np.concatenate(self.current_utterance, axis=0)
+                                peak_rms = np.sqrt(np.mean(utterance_data.astype(np.float32)**2))
+                                if peak_rms >= self.energy_threshold * 0.8:
+                                    self.transcription_queue.put(utterance_data)
                             self.current_utterance = []
                             self.is_speaking = False
                             self.silence_count = 0
@@ -931,32 +942,29 @@ class ContinuousPCDictation:
             pass
         return None
 
+    def _is_hallucination(self, text):
+        if not text:
+            return True
+        lower = text.lower()
+        hallucinations = [
+            "click on the link",
+            "description box",
+            "subscribe",
+            "thanks for watching",
+            "thank you for watching",
+            "more in the description",
+            "how will you update",
+            "ist doll her",
+            "mehr der sich damit",
+            "like and share",
+            "leave a comment",
+            "to get the link",
+            "exit detected in voicebridge"
+        ]
+        return any(h in lower for h in hallucinations)
+
     def _transcribe_fast(self, audio_array):
-        # 1. Local Neural Bilingual AI Engine (Whisper INT8 CPU - 0 internet, 0 keys, bilingual code-switching)
-        if self.whisper_model:
-            try:
-                float_audio = (audio_array.astype(np.float32) / 32768.0).flatten()
-                segments, info = self.whisper_model.transcribe(
-                    float_audio,
-                    beam_size=1,
-                    initial_prompt="Secret detected in VoiceBridge. Deployment production check karo. Bhai ek login function bana do. Ctrl + Alt + V dabaiye."
-                )
-                text = " ".join(seg.text for seg in segments).strip()
-                if text:
-                    return text
-            except Exception:
-                pass
-
-        # 2. Cloud Groq Whisper (Optional API Key)
-        if self.groq_key:
-            try:
-                t = self._transcribe_groq(audio_array.tobytes())
-                if t:
-                    return t
-            except Exception:
-                pass
-
-        # 3. Dual-Stream Google Cloud Speech API (Concurrent en-IN + hi-IN)
+        # 1. Dual-Stream Google Cloud Speech API (Ultra-accurate, 0 hallucinations, concurrent en-IN + hi-IN)
         try:
             audio_data = sr.AudioData(audio_array.tobytes(), SAMPLE_RATE, 2)
             flac_bytes = audio_data.get_flac_data()
@@ -970,21 +978,50 @@ class ContinuousPCDictation:
             if text_en and text_en.strip():
                 en_clean = text_en.strip()
                 if not text_hi:
-                    return en_clean
+                    if not self._is_hallucination(en_clean):
+                        return en_clean
                 # Check if user spoke primarily English or technical terms
                 words_en = set(re.findall(r'[a-zA-Z]{3,}', en_clean.lower()))
-                keywords = {'secret', 'detect', 'detected', 'deployment', 'deployments', 'production', 'voice', 'bridge', 'combination', 'readme', 'change', 'push', 'login', 'function', 'antigravity', 'vscode', 'terminal', 'system'}
+                keywords = {'secret', 'detect', 'detected', 'deployment', 'deployments', 'production', 'voice', 'bridge', 'voicebridge', 'combination', 'readme', 'change', 'push', 'login', 'function', 'antigravity', 'vscode', 'terminal', 'system', 'skill', 'update', 'install'}
                 if len(words_en) >= 2 or any(k in en_clean.lower() for k in keywords):
-                    return en_clean
+                    if not self._is_hallucination(en_clean):
+                        return en_clean
 
             if text_hi and text_hi.strip():
-                return text_hi.strip()
+                if not self._is_hallucination(text_hi):
+                    return text_hi.strip()
 
             if text_en and text_en.strip():
-                return text_en.strip()
+                if not self._is_hallucination(text_en):
+                    return text_en.strip()
 
         except Exception:
             pass
+
+        # 2. Local Neural Whisper (Fallback if offline, with strict Silero VAD)
+        if self.whisper_model:
+            try:
+                float_audio = (audio_array.astype(np.float32) / 32768.0).flatten()
+                segments, info = self.whisper_model.transcribe(
+                    float_audio,
+                    beam_size=1,
+                    vad_filter=True,
+                    no_speech_threshold=0.65
+                )
+                text = " ".join(seg.text for seg in segments).strip()
+                if text and not self._is_hallucination(text):
+                    return text
+            except Exception:
+                pass
+
+        # 3. Cloud Groq Whisper (Optional API Key)
+        if self.groq_key:
+            try:
+                t = self._transcribe_groq(audio_array.tobytes())
+                if t and not self._is_hallucination(t):
+                    return t
+            except Exception:
+                pass
 
         return None
 
