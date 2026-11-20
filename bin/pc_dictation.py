@@ -741,6 +741,7 @@ def get_google_speech_url(lang="hi-IN"):
     return builder.build_url()
 
 class ContinuousPCDictation:
+    def __init__(self, hotkey="ctrl+alt+v", lang="hi-IN", format_mode="hinglish", server_url="http://127.0.0.1:57890", groq_key=None):
     def __init__(self, hotkey="ctrl+alt+v", lang="hi-IN", format_mode="hindi", server_url="http://127.0.0.1:57890", groq_key=None):
         self.hotkey = hotkey
         self.lang = lang
@@ -913,10 +914,13 @@ class ContinuousPCDictation:
             raw_text = self._transcribe_fast(audio_array)
 
             if raw_text and raw_text.strip():
+                if self.format_mode == "hinglish":
                 if self.format_mode == "hindi":
                     final_text = clean_devanagari(raw_text.strip())
                 else:
                     final_text = to_hinglish(raw_text.strip())
+                else:
+                    final_text = raw_text.strip()
 
                 sys.stdout.write(f"\r[⚡ Typed]: {final_text}\n")
                 sys.stdout.flush()
@@ -1100,8 +1104,11 @@ class ContinuousPCDictation:
 
     def run(self):
         print("=" * 65)
+        print("🎙️ VoiceBridge PC Direct Voice Dictation (Smart Hinglish Chat)")
         print("🎙️ VoiceBridge PC Direct Voice Dictation")
         print(f"👉 Shortcut Key : [{self.hotkey.upper()}] (Press to Start / Stop)")
+        print(f"👉 Output Format : {self.format_mode.upper()} (600+ Developer & Chatting Terms)")
+        print(f"👉 Response Speed: 400ms Trigger + Keep-Alive Connection Pooling")
         mode_desc = "Devanagari Hindi + English Code" if self.format_mode == "hindi" else "Romanized Chat Hinglish"
         print(f"👉 Output Format : {self.format_mode.upper()} ({mode_desc})")
         print(f"👉 Response Speed: 400ms Trigger + Neural Whisper Base Engine")
@@ -1129,6 +1136,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VoiceBridge PC Continuous Voice Dictation")
     parser.add_argument("--hotkey", default="ctrl+alt+v", help="Global shortcut key (default: ctrl+alt+v)")
     parser.add_argument("--lang", default="hi-IN", help="Recognition language (hi-IN, en-IN)")
+    parser.add_argument("--format", default="hinglish", choices=["hinglish", "hindi"], help="Output format: hinglish or hindi")
     parser.add_argument("--format", default="hindi", choices=["hindi", "hinglish"], help="Output format: hindi (Devanagari) or hinglish (Romanized)")
     parser.add_argument("--server", default="http://127.0.0.1:57890", help="VoiceBridge server URL")
     parser.add_argument("--groq-key", default=None, help="Optional Groq API key")

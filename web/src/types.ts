@@ -16,6 +16,8 @@ export interface ServerStatus {
 
 export interface TransferProgress {
   transferId: string;
+  name?: string;
+  transferType?: 'text' | 'image' | 'file';
   status: 'receiving' | 'paused' | 'completed' | 'cancelled';
   receivedChunks: number;
   totalChunks: number;
@@ -28,12 +30,29 @@ export interface TransferProgress {
 
 export interface HistoryItem {
   id: string;
-  timestamp: number;
-  timeFormatted: string;
-  totalBytes: number;
-  totalLines: number;
-  totalCharacters: number;
+  name?: string;
+  type?: 'text' | 'image' | 'file';
+  path?: string;
+  size?: number;
+  lines?: number;
+  time?: string;
+  timestamp?: number;
+  timeFormatted?: string;
+  totalBytes?: number;
+  totalLines?: number;
+  totalCharacters?: number;
   preview: string;
+}
+
+export interface StreamAttachment {
+  id: string;
+  name: string;
+  type: 'image' | 'file';
+  size?: number;
+  url?: string;
+  path?: string;
+  status: 'receiving' | 'saved' | 'failed';
+  progress?: number;
 }
 
 export interface WsMessage {

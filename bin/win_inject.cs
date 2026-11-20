@@ -1,6 +1,9 @@
 using System;
 using System.Runtime.InteropServices;
 using System.IO;
+using System.Windows.Forms;
+using System.Drawing;
+using System.Collections.Specialized;
 
 class WinInject {
     [StructLayout(LayoutKind.Sequential)]
@@ -34,9 +37,7 @@ class WinInject {
         public IntPtr dwExtraInfo;
     }
 
-    const uint INPUT_MOUSE = 0;
     const uint INPUT_KEYBOARD = 1;
-
     const uint KEYEVENTF_KEYUP = 0x0002;
     const uint KEYEVENTF_UNICODE = 0x0004;
 
@@ -50,13 +51,13 @@ class WinInject {
     const uint MOUSEEVENTF_WHEEL = 0x0800;
 
     [DllImport("user32.dll", SetLastError = true)]
-    static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    static extern bool SetThreadDesktop(IntPtr hDesktop);
-
-    [DllImport("user32.dll", SetLastError = true)]
     static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+    [DllImport("user32.dll")]
+    static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo);
+
+    [DllImport("user32.dll")]
+    static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
     [DllImport("user32.dll")]
     static extern bool OpenClipboard(IntPtr hWndNewOwner);
@@ -74,157 +75,188 @@ class WinInject {
     static extern bool GlobalUnlock(IntPtr hMem);
 
     static void SendMouseInput(uint flags, int dx = 0, int dy = 0, uint mouseData = 0) {
-        INPUT[] inp = new INPUT[1];
-        inp[0].type = INPUT_MOUSE;
-        inp[0].mkhi.mi.dx = dx;
-        inp[0].mkhi.mi.dy = dy;
-        inp[0].mkhi.mi.mouseData = mouseData;
-        inp[0].mkhi.mi.dwFlags = flags;
-        SendInput(1, inp, Marshal.SizeOf(typeof(INPUT)));
+        try {
+            mouse_event(flags, dx, dy, mouseData, UIntPtr.Zero);
+        } catch {}
     }
 
+    [STAThread]
     public static void Main(string[] args) {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.InputEncoding = System.Text.Encoding.UTF8;
 
-        try {
-            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x10000000 /* GENERIC_ALL */);
-            if (hDesk == IntPtr.Zero) {
-                hDesk = OpenDesktop("Default", 0, false, 0x01FF /* DESKTOP_ALL_ACCESS */);
-            }
-            if (hDesk != IntPtr.Zero) {
-                SetThreadDesktop(hDesk);
-            }
-        } catch {}
-
         string line;
         while ((line = Console.ReadLine()) != null) {
-            if (line.StartsWith("TYPE:")) {
-                string text = line.Substring(5);
-                foreach (char c in text) {
-                    INPUT[] inp = new INPUT[2];
-                    inp[0].type = INPUT_KEYBOARD;
-                    inp[0].mkhi.ki.wScan = (ushort)c;
-                    inp[0].mkhi.ki.dwFlags = KEYEVENTF_UNICODE;
-                    inp[1].type = INPUT_KEYBOARD;
-                    inp[1].mkhi.ki.wScan = (ushort)c;
-                    inp[1].mkhi.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
-                    SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
+            try {
+                if (line.StartsWith("TYPE:")) {
+                    string text = line.Substring(5);
+                    uint ret = 0;
+                    foreach (char c in text) {
+                        INPUT[] inp = new INPUT[2];
+                        inp[0].type = INPUT_KEYBOARD;
+                        inp[0].mkhi.ki.wVk = 0;
+                        inp[0].mkhi.ki.wScan = (ushort)c;
+                        inp[0].mkhi.ki.dwFlags = KEYEVENTF_UNICODE;
+                        inp[1].type = INPUT_KEYBOARD;
+                        inp[1].mkhi.ki.wVk = 0;
+                        inp[1].mkhi.ki.wScan = (ushort)c;
+                        inp[1].mkhi.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+                        ret += SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
+                    }
+                    if (ret == 0 && text.Length > 0) {
+                        // Fallback: Clipboard + Ctrl+V
+                        // Guarantees typing into any input even when UIPI blocks SendInput
+                        byte[] bytes = System.Text.Encoding.Unicode.GetBytes(text + "\0");
+                        IntPtr hMem = GlobalAlloc(0x0002, (UIntPtr)bytes.Length);
+                        IntPtr ptr = GlobalLock(hMem);
+                        Marshal.Copy(bytes, 0, ptr, bytes.Length);
+                        GlobalUnlock(hMem);
+                        OpenClipboard(IntPtr.Zero);
+                        EmptyClipboard();
+                        SetClipboardData(13, hMem);
+                        CloseClipboard();
+
+                        keybd_event(0x11, 0, 0, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(10);
+                        keybd_event(0x56, 0, 0, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(25);
+                        keybd_event(0x56, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(10);
+                        keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    }
+                    Console.WriteLine("OK");
+                } else if (line.StartsWith("BS:")) {
+                    int count = int.Parse(line.Substring(3));
+                    for (int i = 0; i < count; i++) {
+                        keybd_event(0x08, 0, 0, UIntPtr.Zero);
+                        keybd_event(0x08, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    }
+                    Console.WriteLine("OK");
+                } else if (line.StartsWith("KEY:")) {
+                    string keyCmd = line.Substring(4).ToUpper().Trim();
+                    if (keyCmd == "ENTER") {
+                        keybd_event(0x0D, 0, 0, UIntPtr.Zero);
+                        keybd_event(0x0D, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    } else if (keyCmd == "TAB") {
+                        keybd_event(0x09, 0, 0, UIntPtr.Zero);
+                        keybd_event(0x09, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    } else if (keyCmd == "ESC") {
+                        keybd_event(0x1B, 0, 0, UIntPtr.Zero);
+                        keybd_event(0x1B, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    } else if (keyCmd == "CTRL+C") {
+                        keybd_event(0x11, 0, 0, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(10);
+                        keybd_event(0x43, 0, 0, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(25);
+                        keybd_event(0x43, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(10);
+                        keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    } else if (keyCmd == "CTRL+V") {
+                        keybd_event(0x11, 0, 0, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(10);
+                        keybd_event(0x56, 0, 0, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(25);
+                        keybd_event(0x56, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                        System.Threading.Thread.Sleep(10);
+                        keybd_event(0x11, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    } else if (keyCmd == "VOL_UP") {
+                        keybd_event(0xAF, 0, 0, UIntPtr.Zero);
+                        keybd_event(0xAF, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    } else if (keyCmd == "VOL_DOWN") {
+                        keybd_event(0xAE, 0, 0, UIntPtr.Zero);
+                        keybd_event(0xAE, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    } else if (keyCmd == "VOL_MUTE") {
+                        keybd_event(0xAD, 0, 0, UIntPtr.Zero);
+                        keybd_event(0xAD, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    }
+                    Console.WriteLine("OK");
+                } else if (line.StartsWith("MOUSE_MOVE:")) {
+                    string[] parts = line.Substring(11).Split(',');
+                    if (parts.Length == 2) {
+                        int dx = (int)Math.Round(double.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture));
+                        int dy = (int)Math.Round(double.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture));
+                        Point cur = Cursor.Position;
+                        Cursor.Position = new Point(cur.X + dx, cur.Y + dy);
+                        SendMouseInput(MOUSEEVENTF_MOVE, dx, dy);
+                    }
+                    Console.WriteLine("OK");
+                } else if (line == "MOUSE_DOWN:LEFT") {
+                    SendMouseInput(MOUSEEVENTF_LEFTDOWN);
+                    Console.WriteLine("OK");
+                } else if (line == "MOUSE_UP:LEFT") {
+                    SendMouseInput(MOUSEEVENTF_LEFTUP);
+                    Console.WriteLine("OK");
+                } else if (line == "MOUSE_CLICK:LEFT") {
+                    SendMouseInput(MOUSEEVENTF_LEFTDOWN);
+                    System.Threading.Thread.Sleep(10);
+                    SendMouseInput(MOUSEEVENTF_LEFTUP);
+                    Console.WriteLine("OK");
+                } else if (line == "MOUSE_CLICK:RIGHT") {
+                    SendMouseInput(MOUSEEVENTF_RIGHTDOWN);
+                    System.Threading.Thread.Sleep(10);
+                    SendMouseInput(MOUSEEVENTF_RIGHTUP);
+                    Console.WriteLine("OK");
+                } else if (line.StartsWith("MOUSE_SCROLL:")) {
+                    int dy = (int)Math.Round(double.Parse(line.Substring(13), System.Globalization.CultureInfo.InvariantCulture));
+                    SendMouseInput(MOUSEEVENTF_WHEEL, 0, 0, (uint)dy);
+                    Console.WriteLine("OK");
+                } else if (line.StartsWith("CLIP:")) {
+                    string text = line.Substring(5);
+                    byte[] bytes = System.Text.Encoding.Unicode.GetBytes(text + "\0");
+                    IntPtr hMem = GlobalAlloc(0x0002, (UIntPtr)bytes.Length);
+                    IntPtr ptr = GlobalLock(hMem);
+                    Marshal.Copy(bytes, 0, ptr, bytes.Length);
+                    GlobalUnlock(hMem);
+                    OpenClipboard(IntPtr.Zero);
+                    EmptyClipboard();
+                    SetClipboardData(13, hMem);
+                    CloseClipboard();
+                    Console.WriteLine("OK");
+                } else if (line.StartsWith("CLIP_IMAGE:")) {
+                    string filePath = line.Substring(11).Trim();
+                    try {
+                        if (File.Exists(filePath)) {
+                            Bitmap bmp = null;
+                            using (Image img = Image.FromFile(filePath)) {
+                                bmp = new Bitmap(img);
+                            }
+                            DataObject data = new DataObject();
+                            data.SetImage(bmp);
+                            data.SetText(filePath);
+                            StringCollection files = new StringCollection();
+                            files.Add(filePath);
+                            data.SetFileDropList(files);
+                            Clipboard.SetDataObject(data, true, 5, 100);
+                            Console.WriteLine("OK");
+                        } else {
+                            Console.WriteLine("ERR:FILE_NOT_FOUND");
+                        }
+                    } catch (Exception ex) {
+                        Console.WriteLine("ERR:" + ex.Message);
+                    }
+                } else if (line.StartsWith("CLIP_FILE:")) {
+                    string filePath = line.Substring(10).Trim();
+                    try {
+                        if (File.Exists(filePath)) {
+                            DataObject data = new DataObject();
+                            StringCollection files = new StringCollection();
+                            files.Add(filePath);
+                            data.SetFileDropList(files);
+                            data.SetText(filePath);
+                            Clipboard.SetDataObject(data, true, 5, 100);
+                            Console.WriteLine("OK");
+                        } else {
+                            Console.WriteLine("ERR:FILE_NOT_FOUND");
+                        }
+                    } catch (Exception ex) {
+                        Console.WriteLine("ERR:" + ex.Message);
+                    }
+                } else if (line == "PING") {
+                    Console.WriteLine("PONG");
                 }
-                Console.WriteLine("OK");
-            } else if (line.StartsWith("BS:")) {
-                int count = int.Parse(line.Substring(3));
-                for (int i = 0; i < count; i++) {
-                    INPUT[] inp = new INPUT[2];
-                    inp[0].type = INPUT_KEYBOARD;
-                    inp[0].mkhi.ki.wVk = 0x08;
-                    inp[1].type = INPUT_KEYBOARD;
-                    inp[1].mkhi.ki.wVk = 0x08;
-                    inp[1].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
-                }
-                Console.WriteLine("OK");
-            } else if (line.StartsWith("KEY:")) {
-                string keyCmd = line.Substring(4).ToUpper().Trim();
-                if (keyCmd == "ENTER") {
-                    INPUT[] inp = new INPUT[2];
-                    inp[0].type = INPUT_KEYBOARD;
-                    inp[0].mkhi.ki.wVk = 0x0D;
-                    inp[1].type = INPUT_KEYBOARD;
-                    inp[1].mkhi.ki.wVk = 0x0D;
-                    inp[1].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
-                } else if (keyCmd == "TAB") {
-                    INPUT[] inp = new INPUT[2];
-                    inp[0].type = INPUT_KEYBOARD;
-                    inp[0].mkhi.ki.wVk = 0x09;
-                    inp[1].type = INPUT_KEYBOARD;
-                    inp[1].mkhi.ki.wVk = 0x09;
-                    inp[1].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
-                } else if (keyCmd == "ESC") {
-                    INPUT[] inp = new INPUT[2];
-                    inp[0].type = INPUT_KEYBOARD;
-                    inp[0].mkhi.ki.wVk = 0x1B;
-                    inp[1].type = INPUT_KEYBOARD;
-                    inp[1].mkhi.ki.wVk = 0x1B;
-                    inp[1].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
-                } else if (keyCmd == "CTRL+C") {
-                    INPUT[] inp = new INPUT[4];
-                    inp[0].type = INPUT_KEYBOARD; inp[0].mkhi.ki.wVk = 0x11; // Ctrl down
-                    inp[1].type = INPUT_KEYBOARD; inp[1].mkhi.ki.wVk = 0x43; // C down
-                    inp[2].type = INPUT_KEYBOARD; inp[2].mkhi.ki.wVk = 0x43; inp[2].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    inp[3].type = INPUT_KEYBOARD; inp[3].mkhi.ki.wVk = 0x11; inp[3].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(4, inp, Marshal.SizeOf(typeof(INPUT)));
-                } else if (keyCmd == "CTRL+V") {
-                    INPUT[] inp = new INPUT[4];
-                    inp[0].type = INPUT_KEYBOARD; inp[0].mkhi.ki.wVk = 0x11;
-                    inp[1].type = INPUT_KEYBOARD; inp[1].mkhi.ki.wVk = 0x56; // V down
-                    inp[2].type = INPUT_KEYBOARD; inp[2].mkhi.ki.wVk = 0x56; inp[2].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    inp[3].type = INPUT_KEYBOARD; inp[3].mkhi.ki.wVk = 0x11; inp[3].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(4, inp, Marshal.SizeOf(typeof(INPUT)));
-                } else if (keyCmd == "VOL_UP") {
-                    INPUT[] inp = new INPUT[2];
-                    inp[0].type = INPUT_KEYBOARD; inp[0].mkhi.ki.wVk = 0xAF; // VK_VOLUME_UP
-                    inp[1].type = INPUT_KEYBOARD; inp[1].mkhi.ki.wVk = 0xAF; inp[1].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
-                } else if (keyCmd == "VOL_DOWN") {
-                    INPUT[] inp = new INPUT[2];
-                    inp[0].type = INPUT_KEYBOARD; inp[0].mkhi.ki.wVk = 0xAE; // VK_VOLUME_DOWN
-                    inp[1].type = INPUT_KEYBOARD; inp[1].mkhi.ki.wVk = 0xAE; inp[1].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
-                } else if (keyCmd == "VOL_MUTE") {
-                    INPUT[] inp = new INPUT[2];
-                    inp[0].type = INPUT_KEYBOARD; inp[0].mkhi.ki.wVk = 0xAD; // VK_VOLUME_MUTE
-                    inp[1].type = INPUT_KEYBOARD; inp[1].mkhi.ki.wVk = 0xAD; inp[1].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
-                    SendInput(2, inp, Marshal.SizeOf(typeof(INPUT)));
-                }
-                Console.WriteLine("OK");
-            } else if (line.StartsWith("MOUSE_MOVE:")) {
-                // Format: MOUSE_MOVE:dx,dy
-                string[] parts = line.Substring(11).Split(',');
-                if (parts.Length == 2) {
-                    int dx = (int)Math.Round(double.Parse(parts[0]));
-                    int dy = (int)Math.Round(double.Parse(parts[1]));
-                    SendMouseInput(MOUSEEVENTF_MOVE, dx, dy);
-                }
-                Console.WriteLine("OK");
-            } else if (line == "MOUSE_DOWN:LEFT") {
-                SendMouseInput(MOUSEEVENTF_LEFTDOWN);
-                Console.WriteLine("OK");
-            } else if (line == "MOUSE_UP:LEFT") {
-                SendMouseInput(MOUSEEVENTF_LEFTUP);
-                Console.WriteLine("OK");
-            } else if (line == "MOUSE_CLICK:LEFT") {
-                SendMouseInput(MOUSEEVENTF_LEFTDOWN);
-                SendMouseInput(MOUSEEVENTF_LEFTUP);
-                Console.WriteLine("OK");
-            } else if (line == "MOUSE_CLICK:RIGHT") {
-                SendMouseInput(MOUSEEVENTF_RIGHTDOWN);
-                SendMouseInput(MOUSEEVENTF_RIGHTUP);
-                Console.WriteLine("OK");
-            } else if (line.StartsWith("MOUSE_SCROLL:")) {
-                // dy in lines or units
-                int dy = (int)Math.Round(double.Parse(line.Substring(13)));
-                SendMouseInput(MOUSEEVENTF_WHEEL, 0, 0, (uint)dy);
-                Console.WriteLine("OK");
-            } else if (line.StartsWith("CLIP:")) {
-                string text = line.Substring(5);
-                byte[] bytes = System.Text.Encoding.Unicode.GetBytes(text + "\0");
-                IntPtr hMem = GlobalAlloc(0x0002, (UIntPtr)bytes.Length);
-                IntPtr ptr = GlobalLock(hMem);
-                Marshal.Copy(bytes, 0, ptr, bytes.Length);
-                GlobalUnlock(hMem);
-                OpenClipboard(IntPtr.Zero);
-                EmptyClipboard();
-                SetClipboardData(13, hMem);
-                CloseClipboard();
-                Console.WriteLine("OK");
-            } else if (line == "PING") {
-                Console.WriteLine("PONG");
+            } catch (Exception ex) {
+                Console.WriteLine("ERR:" + ex.Message);
             }
         }
     }
 }
-

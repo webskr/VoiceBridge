@@ -1,80 +1,124 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { 
-  MousePointer, 
-  Volume2, 
-  Volume1, 
-  VolumeX 
-} from 'lucide-react';
+import { Volume2, Volume1, VolumeX } from 'lucide-react';
+
+// SENSITIVITY CONSTANT: Tweak here for laptop-grade cursor control
+const SENSITIVITY = 1.35;
 
 interface MobileMouseProps {
   onMouseMove: (dx: number, dy: number) => void;
   onMouseClick: (button: 'left' | 'right') => void;
+  onMouseDown: (button: 'left' | 'right') => void;
+  onMouseUp: (button: 'left' | 'right') => void;
   onMouseScroll: (dy: number) => void;
   onKeyPress: (key: string) => void;
-  onPause: () => void;
-  onResume: () => void;
-  onDisconnect: () => void;
-  isPaused: boolean;
+}
+
+interface PointerData {
+  id: number;
+  zone: 'upper' | 'btn-left' | 'btn-right';
+  x: number;
+  y: number;
+  clientX: number;
+  clientY: number;
+  lastClientX: number;
+  lastClientY: number;
+  startTime: number;
+  totalDistance: number;
+  hasMoved: boolean;
+  active: boolean;
+  alpha: number;
 }
 
 interface TrailPoint {
   x: number;
   y: number;
   alpha: number;
-  touchId: number;
+  pointerId: number;
 }
 
 export const MobileMouse: React.FC<MobileMouseProps> = ({
   onMouseMove,
   onMouseClick,
+  onMouseDown,
+  onMouseUp,
   onMouseScroll,
   onKeyPress
 }) => {
   const padRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const trailsRef = useRef<TrailPoint[]>([]);
-  const animFrameRef = useRef<number | null>(null);
 
-  const lastTouchRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
-  const [sensitivity] = useState(2.2);
-  const [activeFeedback, setActiveFeedback] = useState<string>('');
+  const [leftPressed, setLeftPressed] = useState(false);
+  const [rightPressed, setRightPressed] = useState(false);
+  const [volFeedback, setVolFeedback] = useState<string>('');
 
-  const showFeedback = (text: string) => {
-    setActiveFeedback(text);
-    setTimeout(() => setActiveFeedback(''), 700);
+  const triggerVol = (key: string, label: string) => {
+    onKeyPress(key);
+    setVolFeedback(label);
+    setTimeout(() => setVolFeedback(''), 700);
   };
 
-  // Canvas size sync & trail fade animation loop
+  // Active pointers map: pointerId -> PointerData
+  const pointersRef = useRef<Map<number, PointerData>>(new Map());
+
+  // Glowing footprint trails array
+  const trailsRef = useRef<TrailPoint[]>([]);
+
+  // RAF motion accumulator
+  const pendingDxRef = useRef<number>(0);
+  const pendingDyRef = useRef<number>(0);
+  const remainderXRef = useRef<number>(0);
+  const remainderYRef = useRef<number>(0);
+  const rafIdRef = useRef<number | null>(null);
+
+  // Scroll tracking for 2-finger gesture
+  const lastTwoFingerAvgYRef = useRef<number | null>(null);
+
+  // Tap tracking
+  const lastTapTimeRef = useRef<number>(0);
+
+  const addTrailPoint = (clientX: number, clientY: number, pointerId: number) => {
+    if (!padRef.current) return;
+    const rect = padRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    trailsRef.current.push({ x, y, alpha: 1.0, pointerId });
+    if (trailsRef.current.length > 120) {
+      trailsRef.current.shift();
+    }
+  };
+
+  // Canvas drawing & touch footprint line animation loop
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const pad = padRef.current;
+    if (!canvas || !pad) return;
 
-    const resizeCanvas = () => {
-      if (padRef.current && canvas) {
-        const rect = padRef.current.getBoundingClientRect();
+    let animId: number;
+
+    const resize = () => {
+      if (pad && canvas) {
+        const rect = pad.getBoundingClientRect();
         canvas.width = rect.width;
         canvas.height = rect.height;
       }
     };
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    resize();
+    window.addEventListener('resize', resize);
 
-    // Continuous render loop for smooth fading footprints
     const renderLoop = () => {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Group trails by touchId so multiple fingers draw their own continuous lines
-        const trailsByTouch: { [id: number]: TrailPoint[] } = {};
+        // Group trails by pointerId
+        const trailsByPointer: { [id: number]: TrailPoint[] } = {};
         for (const p of trailsRef.current) {
-          if (!trailsByTouch[p.touchId]) trailsByTouch[p.touchId] = [];
-          trailsByTouch[p.touchId].push(p);
+          if (!trailsByPointer[p.pointerId]) trailsByPointer[p.pointerId] = [];
+          trailsByPointer[p.pointerId].push(p);
         }
 
-        // Draw footprint glowing trail lines for EACH finger
-        Object.values(trailsByTouch).forEach(trails => {
+        // 1. Draw glowing footprint lines for each finger
+        Object.values(trailsByPointer).forEach((trails) => {
           if (trails.length > 1) {
             for (let i = 1; i < trails.length; i++) {
               const p1 = trails[i - 1];
@@ -82,228 +126,325 @@ export const MobileMouse: React.FC<MobileMouseProps> = ({
               const avgAlpha = (p1.alpha + p2.alpha) / 2;
 
               if (avgAlpha > 0.02) {
+                ctx.save();
                 ctx.beginPath();
                 ctx.moveTo(p1.x, p1.y);
                 ctx.lineTo(p2.x, p2.y);
-                ctx.strokeStyle = `rgba(56, 189, 248, ${avgAlpha})`;
+                ctx.strokeStyle = `rgba(56, 189, 248, ${avgAlpha * 0.95})`;
                 ctx.lineWidth = 4 * avgAlpha;
                 ctx.lineCap = 'round';
                 ctx.shadowColor = '#38bdf8';
-                ctx.shadowBlur = 8 * avgAlpha;
+                ctx.shadowBlur = 10 * avgAlpha;
                 ctx.stroke();
+                ctx.restore();
               }
             }
           }
 
-          // Draw Glowing Finger Footprint Dot at head of each finger
+          // 2. Draw glowing touch circle at current pointer position
           if (trails.length > 0) {
             const head = trails[trails.length - 1];
-            if (head.alpha > 0.05) {
-              ctx.beginPath();
-              ctx.arc(head.x, head.y, 9 * head.alpha, 0, Math.PI * 2);
-              ctx.fillStyle = `rgba(56, 189, 248, ${head.alpha})`;
+            if (head.alpha > 0.04) {
+              ctx.save();
               ctx.shadowColor = '#38bdf8';
               ctx.shadowBlur = 14 * head.alpha;
+
+              // Outer translucent glow ring
+              ctx.beginPath();
+              ctx.arc(head.x, head.y, 14, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(56, 189, 248, ${0.28 * head.alpha})`;
               ctx.fill();
+
+              // Inner bright core
+              ctx.beginPath();
+              ctx.arc(head.x, head.y, 6, 0, Math.PI * 2);
+              ctx.fillStyle = `rgba(56, 189, 248, ${0.9 * head.alpha})`;
+              ctx.fill();
+              ctx.restore();
             }
           }
         });
 
-        // Decay alphas for smooth disappear
+        // Decay trail alphas smoothly
         for (let i = 0; i < trailsRef.current.length; i++) {
-          trailsRef.current[i].alpha *= 0.90;
+          trailsRef.current[i].alpha *= 0.88;
         }
-
-        // Filter dead points
-        trailsRef.current = trailsRef.current.filter(p => p.alpha > 0.02);
+        trailsRef.current = trailsRef.current.filter((p) => p.alpha > 0.02);
       }
-      animFrameRef.current = requestAnimationFrame(renderLoop);
+      animId = requestAnimationFrame(renderLoop);
     };
 
-    animFrameRef.current = requestAnimationFrame(renderLoop);
+    animId = requestAnimationFrame(renderLoop);
 
     return () => {
-      window.removeEventListener('resize', resizeCanvas);
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-      }
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(animId);
     };
   }, []);
 
-  const addTrailPoint = (clientX: number, clientY: number, touchId: number) => {
+  // Flush batched mouse moves via requestAnimationFrame
+  const scheduleMoveFlush = () => {
+    if (rafIdRef.current !== null) return;
+    rafIdRef.current = requestAnimationFrame(() => {
+      const totalX = pendingDxRef.current + remainderXRef.current;
+      const totalY = pendingDyRef.current + remainderYRef.current;
+
+      const sendX = Math.round(totalX);
+      const sendY = Math.round(totalY);
+
+      remainderXRef.current = totalX - sendX;
+      remainderYRef.current = totalY - sendY;
+
+      pendingDxRef.current = 0;
+      pendingDyRef.current = 0;
+      rafIdRef.current = null;
+
+      if (sendX !== 0 || sendY !== 0) {
+        onMouseMove(sendX, sendY);
+      }
+    });
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     if (!padRef.current) return;
+
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
+
     const rect = padRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
-    trailsRef.current.push({ x, y, alpha: 1.0, touchId });
-    if (trailsRef.current.length > 80) {
-      trailsRef.current.shift();
-    }
-  };
+    addTrailPoint(e.clientX, e.clientY, e.pointerId);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    for (let i = 0; i < e.touches.length; i++) {
-      const t = e.touches[i];
-      addTrailPoint(t.clientX, t.clientY, t.identifier);
-    }
+    const isLowerZone = y >= rect.height * 0.65;
+    let zone: 'upper' | 'btn-left' | 'btn-right' = 'upper';
 
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      lastTouchRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-      touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
-    } else if (e.touches.length === 2) {
-      const avgY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      lastTouchRef.current = { x: 0, y: avgY, time: Date.now() };
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    // Add neon trail point for all active touches (both 1-finger and 2-finger)
-    for (let i = 0; i < e.touches.length; i++) {
-      const t = e.touches[i];
-      addTrailPoint(t.clientX, t.clientY, t.identifier);
-    }
-
-    if (!lastTouchRef.current) return;
-
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      const dx = (touch.clientX - lastTouchRef.current.x) * sensitivity;
-      const dy = (touch.clientY - lastTouchRef.current.y) * sensitivity;
-
-      onMouseMove(dx, dy);
-      lastTouchRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
-    } else if (e.touches.length === 2) {
-      // 2 finger vertical scroll with double neon trail
-      const avgY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      const dy = (avgY - lastTouchRef.current.y) * 25;
-      onMouseScroll(dy);
-      lastTouchRef.current = { x: 0, y: avgY, time: Date.now() };
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartPosRef.current && lastTouchRef.current) {
-      const elapsed = Date.now() - lastTouchRef.current.time;
-      const movedX = Math.abs(lastTouchRef.current.x - touchStartPosRef.current.x);
-      const movedY = Math.abs(lastTouchRef.current.y - touchStartPosRef.current.y);
-
-      // Tap detection (minimal movement within 250ms)
-      if (elapsed < 250 && movedX < 10 && movedY < 10) {
-        // Check if tap was in the bottom half of trackpad
-        if (padRef.current) {
-          const rect = padRef.current.getBoundingClientRect();
-          const relativeY = touchStartPosRef.current.y - rect.top;
-          const relativeX = touchStartPosRef.current.x - rect.left;
-
-          // If tapped in lower half
-          if (relativeY > rect.height * 0.70) {
-            if (relativeX < rect.width * 0.5) {
-              onMouseClick('left');
-              showFeedback('Left Click');
-              lastTouchRef.current = null;
-              touchStartPosRef.current = null;
-              return;
-            } else {
-              onMouseClick('right');
-              showFeedback('Right Click');
-              lastTouchRef.current = null;
-              touchStartPosRef.current = null;
-              return;
-            }
-          }
+    if (isLowerZone) {
+      if (x < rect.width * 0.5) {
+        zone = 'btn-left';
+        setLeftPressed(true);
+        onMouseDown('left');
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try { navigator.vibrate(10); } catch {}
         }
-
-        // Tap in upper main area defaults to Left Click
-        onMouseClick('left');
-        showFeedback('Tap Click');
+      } else {
+        zone = 'btn-right';
+        setRightPressed(true);
+        onMouseDown('right');
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          try { navigator.vibrate(10); } catch {}
+        }
       }
     }
-    lastTouchRef.current = null;
-    touchStartPosRef.current = null;
+
+    pointersRef.current.set(e.pointerId, {
+      id: e.pointerId,
+      zone,
+      x,
+      y,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      lastClientX: e.clientX,
+      lastClientY: e.clientY,
+      startTime: performance.now(),
+      totalDistance: 0,
+      hasMoved: false,
+      active: true,
+      alpha: 1.0
+    });
+
+    // Check if 2 pointers are in upper zone for scrolling start
+    const upperPointers = Array.from(pointersRef.current.values()).filter(p => p.active && p.zone === 'upper');
+    if (upperPointers.length === 2) {
+      lastTwoFingerAvgYRef.current = (upperPointers[0].clientY + upperPointers[1].clientY) / 2;
+    } else {
+      lastTwoFingerAvgYRef.current = null;
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const p = pointersRef.current.get(e.pointerId);
+    if (!p || !p.active || !padRef.current) return;
+
+    const rect = padRef.current.getBoundingClientRect();
+    p.x = e.clientX - rect.left;
+    p.y = e.clientY - rect.top;
+
+    // Process coalesced events for highest accuracy
+    // @ts-ignore
+    const events: PointerEvent[] = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [e.nativeEvent];
+
+    // Add trail points for footprint line
+    for (const ev of events) {
+      addTrailPoint(ev.clientX, ev.clientY, e.pointerId);
+    }
+
+    // If pointer is in upper movement zone
+    if (p.zone === 'upper') {
+      const upperPointers = Array.from(pointersRef.current.values()).filter(it => it.active && it.zone === 'upper');
+
+      // Two-finger scroll
+      if (upperPointers.length === 2) {
+        p.clientX = e.clientX;
+        p.clientY = e.clientY;
+        const currentAvgY = (upperPointers[0].clientY + upperPointers[1].clientY) / 2;
+        if (lastTwoFingerAvgYRef.current !== null) {
+          const deltaY = (currentAvgY - lastTwoFingerAvgYRef.current) * 1.6;
+          onMouseScroll(deltaY);
+        }
+        lastTwoFingerAvgYRef.current = currentAvgY;
+        return;
+      }
+
+      // Single finger cursor movement
+      if (upperPointers.length === 1) {
+        // First move after pointerdown must have delta 0 (no jumping)
+        if (!p.hasMoved) {
+          p.hasMoved = true;
+          p.lastClientX = e.clientX;
+          p.lastClientY = e.clientY;
+          p.clientX = e.clientX;
+          p.clientY = e.clientY;
+          return;
+        }
+
+        for (const ev of events) {
+          const rawDx = ev.clientX - p.lastClientX;
+          const rawDy = ev.clientY - p.lastClientY;
+          p.lastClientX = ev.clientX;
+          p.lastClientY = ev.clientY;
+
+          const dist = Math.hypot(rawDx, rawDy);
+          p.totalDistance += dist;
+
+          if (dist === 0) continue;
+
+          // Light acceleration curve
+          const accel = Math.min(2.5, Math.max(1.0, 1.0 + (dist - 1.2) * 0.12));
+
+          pendingDxRef.current += rawDx * SENSITIVITY * accel;
+          pendingDyRef.current += rawDy * SENSITIVITY * accel;
+        }
+
+        p.clientX = e.clientX;
+        p.clientY = e.clientY;
+        scheduleMoveFlush();
+      }
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const p = pointersRef.current.get(e.pointerId);
+    if (!p) return;
+
+    p.active = false;
+
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+
+    // Button zone release
+    if (p.zone === 'btn-left') {
+      setLeftPressed(false);
+      onMouseUp('left');
+    } else if (p.zone === 'btn-right') {
+      setRightPressed(false);
+      onMouseUp('right');
+    } else if (p.zone === 'upper') {
+      const elapsed = performance.now() - p.startTime;
+
+      // Tap detection (minimal movement within 220ms)
+      if (p.totalDistance < 9 && elapsed < 220) {
+        // If 2 upper fingers were tapped simultaneously
+        const remainingUpper = Array.from(pointersRef.current.values()).filter(it => it.zone === 'upper');
+        if (remainingUpper.length >= 2) {
+          onMouseClick('right');
+        } else {
+          // Single tap or double tap
+          const now = performance.now();
+          if (now - lastTapTimeRef.current < 300) {
+            onMouseClick('left');
+            lastTapTimeRef.current = 0;
+          } else {
+            lastTapTimeRef.current = now;
+            onMouseClick('left');
+          }
+        }
+      }
+    }
+
+    const activeUpper = Array.from(pointersRef.current.values()).filter(it => it.active && it.zone === 'upper');
+    if (activeUpper.length < 2) {
+      lastTwoFingerAvgYRef.current = null;
+    }
   };
 
   return (
-    <div className="mobile-mouse-container">
+    <div className="trackpad-full-container">
       {/* Sound Volume Control Bar */}
-      <div className="sound-control-card">
-        <div className="sound-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-            <Volume2 size={16} className="text-cyan" />
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>PC Sound Volume</span>
-          </div>
-          {activeFeedback && <span className="vol-feedback-tag">{activeFeedback}</span>}
-        </div>
-
+      <div className="trackpad-sound-bar">
         <div className="sound-buttons-row">
           <button
             type="button"
             className="btn-vol btn-vol-mute"
-            onClick={() => { onKeyPress('VOL_MUTE'); showFeedback('Mute Toggle'); }}
+            onClick={() => triggerVol('VOL_MUTE', 'Mute')}
             title="Mute / Unmute"
           >
-            <VolumeX size={18} />
+            <VolumeX size={15} />
             <span>Mute</span>
           </button>
 
           <button
             type="button"
-            className="btn-vol btn-vol-down"
-            onClick={() => { onKeyPress('VOL_DOWN'); showFeedback('Volume -'); }}
+            className="btn-vol"
+            onClick={() => triggerVol('VOL_DOWN', 'Vol -')}
             title="Decrease Volume"
           >
-            <Volume1 size={18} />
+            <Volume1 size={15} />
             <span>Vol -</span>
           </button>
 
           <button
             type="button"
-            className="btn-vol btn-vol-up"
-            onClick={() => { onKeyPress('VOL_UP'); showFeedback('Volume +'); }}
+            className="btn-vol"
+            onClick={() => triggerVol('VOL_UP', 'Vol +')}
             title="Increase Volume"
           >
-            <Volume2 size={18} />
+            <Volume2 size={15} />
             <span>Vol +</span>
           </button>
         </div>
+        {volFeedback && <span className="vol-feedback-tag">{volFeedback}</span>}
       </div>
 
-      {/* Main Trackpad Surface with Dual-Finger Neon Footprint Canvas */}
+      {/* Main Trackpad Surface */}
       <div
         ref={padRef}
-        className="trackpad-surface"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        className="trackpad-full-surface"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
       >
-        <canvas ref={canvasRef} className="trackpad-canvas" />
+        {/* Glowing footprint trail line canvas */}
+        <canvas ref={canvasRef} className="trackpad-touch-canvas" />
 
-        <div className="trackpad-hint">
-          <MousePointer size={36} className="trackpad-icon" />
-          <p>Trackpad Area</p>
-          <span>1 finger move • 2 fingers scroll</span>
+        {/* 65% Height Divider: vertical line down to bottom edge at horizontal center */}
+        <div className="trackpad-inner-divider" />
+
+        {/* Lower Left Zone */}
+        <div className={`trackpad-zone-label zone-left ${leftPressed ? 'pressed' : ''}`}>
+          <span>Left</span>
         </div>
 
-        {/* Integrated Bottom Physical Click Partition (Horizontal Split Line) */}
-        <div className="trackpad-bottom-buttons">
-          <button
-            type="button"
-            className="trackpad-half-btn btn-left-half"
-            onClick={() => { onMouseClick('left'); showFeedback('Left Click'); }}
-          >
-            LEFT CLICK
-          </button>
-
-          <div className="trackpad-divider-line" />
-
-          <button
-            type="button"
-            className="trackpad-half-btn btn-right-half"
-            onClick={() => { onMouseClick('right'); showFeedback('Right Click'); }}
-          >
-            RIGHT CLICK
-          </button>
+        {/* Lower Right Zone */}
+        <div className={`trackpad-zone-label zone-right ${rightPressed ? 'pressed' : ''}`}>
+          <span>Right</span>
         </div>
       </div>
     </div>

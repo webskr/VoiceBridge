@@ -1,6 +1,6 @@
 # 🎙️ VoiceBridge MCP Server
-> **The All-in-One Voice Dictation & AI Input Companion for Developers.**  
-> *Direct PC Microphone Voice Typing with Global Hotkey, Smart Hinglish Developer Chat Engine, Mobile Phone Companion, Virtual Trackpad & 3,000+ Line Clipboard Injector for Google Antigravity, Cursor, Claude Desktop, and VS Code.*
+> **The All-in-One Voice Dictation, Offline File Sharing & AI Input Companion for Developers.**  
+> *Direct PC Microphone Voice Typing with Global Hotkey, Smart Hinglish Developer Chat Engine, Mobile Phone Companion, Instant QR Scanner, Precision Virtual Trackpad & 3,000+ Line Clipboard Injector for Google Antigravity, Cursor, Claude Desktop, and VS Code.*
 
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%202024--11--05%20%7C%202025--03--26-purple.svg)](https://modelcontextprotocol.io)
 [![Streamable HTTP](https://img.shields.io/badge/MCP%20URL-http%3A%2F%2F127.0.0.1%3A57890%2Fmcp-blue.svg)](http://127.0.0.1:57890/mcp)
@@ -32,7 +32,7 @@ The agent immediately checks server health, displays your phone pairing QR code 
 
 ## ✨ Features & Dual Modes
 
-VoiceBridge gives you **two powerful ways** to dictate code and control your PC:
+VoiceBridge gives you **two powerful ways** to dictate code, share files, and control your PC:
 
 ### Mode 1: 🎙️ Direct PC Voice Dictation (Zero Phone Needed)
 Speak directly into your PC's microphone (desktop mic, laptop mic, or headset) without needing your phone or keeping a browser tab open:
@@ -50,15 +50,38 @@ Speak directly into your PC's microphone (desktop mic, laptop mic, or headset) w
 
 ---
 
-### Mode 2: 📱 Mobile Companion (Wireless over Wi-Fi)
-Turn your phone into a remote wireless microphone, touchpad, and clipboard bridge:
-* **Mobile Keyboard & Gboard Dictation**: Use your mobile phone's keyboard microphone to dictate prompts hands-free while away from your desk.
-* **Virtual Trackpad & Gesture Scrolling**:
-  * 1-finger swipe for smooth mouse cursor navigation with neon footprint trails.
-  * 2-finger scroll up/down with dual-finger visual neon trails.
-  * Dedicated split zones for Left Click and Right Click.
-* **PC Sound Volume Bar**: Adjust computer audio (`Mute`, `Vol -`, `Vol +`) directly from your phone.
-* **3,000+ Lines Clipboard Injector**: Transfer massive code files, logs, or stack traces directly into Windows clipboard in 0.03s with CRC32 integrity check.
+### Mode 2: 📱 Mobile Companion (Wireless over Local Wi-Fi / Hotspot)
+Turn your phone into a remote wireless microphone, touchpad, file sender, and clipboard bridge:
+* **📷 Instant QR Code Pairing Scanner**:
+  * Tap **"Scan QR Code"** on your phone to scan the PC dashboard's QR code.
+  * Features rear-camera live scanner with laser framing overlay on secure origins.
+  * Built-in automatic fallback to camera photo capture on plain LAN HTTP (`http://192.168.x.x`), auto-extracting the PIN and auto-connecting in 1 click!
+* **📁 Offline File & Photo Sharing (Zero Internet Needed)**:
+  * Attach photos, screenshots, PDFs, documents, or project ZIP files right inside the keyboard input box.
+  * Real-time chunked transfer over local Wi-Fi with CRC32 integrity check.
+  * Files save automatically to `Downloads/VoiceBridge/` on your PC.
+  * Inline thumbnail preview modal for images on both phone and desktop.
+* **📜 Unified Chat-Style Scrolling**:
+  * Attachment chips and live text live in ONE unified scroll container.
+  * Auto-scrolls to the bottom on new text or attachments without jumping if user scrolled up manually.
+* **🖱️ Precision Virtual Trackpad & True Drag-and-Drop**:
+  * Sleek dark radial surface with real-time glowing cyan touch footprint trails (`#38bdf8`).
+  * Sub-pixel accumulator and velocity acceleration (slow movement 1:1, fast flick up to 2.5x).
+  * First move delta is strictly zero (zero cursor jump on touch).
+  * Built-in Left & Right click zones with `pointerdown`/`pointerup` for true **drag-and-drop** (`Hold Left button with 1 finger + drag with 2nd finger`).
+  * 1-finger tap = Left Click, Double-tap = Double Click, 2-finger tap = Right Click, 2-finger drag = Scroll.
+* **🔊 Sound Volume Controls**:
+  * Instant PC audio volume control (`Mute`, `Vol -`, `Vol +`) directly from the phone trackpad.
+* **📋 3,000+ Lines Clipboard Injector**:
+  * Transfer massive code files, logs, or stack traces directly into Windows clipboard in 0.03s with CRC32 integrity check.
+
+---
+
+### 🖥️ Clean Single-Viewport PC Dashboard
+* **Zero Page Scroll Layout**: Responsive 70/30 CSS grid that perfectly fits 1366×768 laptops and 1080p monitors.
+* **Left Panel (70%)**: Live Voice Typing Stream card with chat-style attachments, image thumbnail lightbox, copy plain text, and 2-second countdown cursor injection.
+* **Right Panel (30%)**: Direct PC Voice guide, Scan-to-Connect QR code with PIN and copyable LAN link, and real-time connection status.
+* **Navbar Controls**: Compact Pause/Resume injection toggle pinned directly in the top header bar next to the Paired badge.
 
 ---
 
@@ -76,13 +99,16 @@ Turn your phone into a remote wireless microphone, touchpad, and clipboard bridg
 ### Option B: Using Mobile Phone Companion
 1. Start the VoiceBridge server:
    ```bash
-   npx -y @webskr/voicebridge start
+   npm start
    ```
+   *Or via NPX: `npx -y @webskr/voicebridge start`*
 2. Open the **PC Companion Dashboard**:
    ```text
    http://localhost:57890/webskr/voice-bridge
    ```
-3. Connect your phone to the same Wi-Fi and open `http://<YOUR_PC_IP>:57890`. Enter the 6-character PIN to start dictating or using the trackpad!
+3. Connect your phone to the same Wi-Fi or mobile hotspot:
+   * Point your phone's camera at the QR code, OR
+   * Open the URL shown on PC and tap **Scan QR Code** or enter the 6-character PIN!
 
 ---
 
@@ -141,22 +167,21 @@ VoiceBridge runs as an ultra-lightweight async service using native Win32 APIs:
 | **Typing Latency** | **~400ms pause trigger** | Instant response with keep-alive HTTP pooling |
 | **Clipboard Safety** | **100% Keystroke Injection** | Zero clipboard overwrites or race conditions |
 | **3,500+ Line Transfer** | **0.03 seconds** | 11,800 KB/s chunked transfer with CRC32 integrity |
+| **Network Requirement** | **100% Offline (Local LAN)** | Mouse, keyboard, clipboard & files need zero internet |
 
 ---
 
-## ❓ Frequently Asked Questions (FAQ)
+## 🛠️ Troubleshooting & Multi-User Connection Tips
 
-#### Q: Do I need a mobile phone to use VoiceBridge?
-**No!** You can use **Direct PC Voice Dictation** entirely on your computer using your PC's mic and the global hotkey `Ctrl + Alt + V`. The mobile phone interface is an optional companion for when you are away from your desk.
+#### 1. Phone aur PC connect nahi ho rahe? (PIN mismatch / connection timeout)
+* **Check Wi-Fi / Hotspot**: Phone aur PC dono ek hi Wi-Fi network par hone chahiye.
+* **College / Hostel / Office Wi-Fi**: College aur hostel routers me security ke liye *"AP / Client Isolation"* on hota hai, jo devices ko aapas me connect hone se rokta hai.
+  * **100% Instant Solution**: Phone ka **Mobile Hotspot** on karein (chahe Mobile Data OFF ho) aur PC ko us hotspot se connect karein. Ek second me connect ho jayega!
+* **Windows Firewall Alert**: Pehli baar run karne par Windows ek popup deta hai *"Allow Node.js to communicate on Private networks"*. Ise **Allow** karein, aur Wi-Fi network profile ko **Private Network** par set rakhein.
+* **Virtual Adapters (WSL / VirtualBox / Docker / VPN)**: VoiceBridge automatically filters out virtual adapters and binds directly to your physical Wi-Fi network.
 
-#### Q: Does typing overwrite my copied text in the Windows clipboard?
-**No.** VoiceBridge uses direct native Windows `SendInput` keystrokes with `KEYEVENTF_UNICODE`. It never touches or overwrites your Windows clipboard.
-
-#### Q: Can I speak in Hindi and English together (Hinglish)?
-**Yes.** VoiceBridge includes a dedicated NLP normalization engine with over 700+ coding, technical, and conversational Indian terms (`bro`, `readme`, `change`, `detect`, `important`, `copy`, `login`, `api`, `vs code`, `antigravity`).
-
-#### Q: Does it require an active Internet connection for local features?
-VoiceBridge server, trackpad, mouse controls, volume bars, and 3k+ line clipboard transfers work **100% locally offline over Wi-Fi**. Voice dictation uses lightweight connection-pooled speech recognition.
+#### 2. Kya bina internet ke kaam karega?
+**Haan, 100%!** Trackpad mouse, virtual keyboard typing, offline photo/file transfer, aur 3,000+ line clipboard transfer local network par chalta hai aur iske liye zero internet connection chahiye.
 
 ---
 

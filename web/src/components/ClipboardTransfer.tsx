@@ -1,9 +1,32 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Clipboard, Send, Pause, Play, XCircle, CheckCircle2, FileText, AlertCircle, Copy } from 'lucide-react';
+import { 
+  FileText, 
+  Image as ImageIcon, 
+  FileUp, 
+  Send, 
+  Pause, 
+  Play, 
+  XCircle, 
+  CheckCircle2, 
+  AlertCircle, 
+  Copy, 
+  UploadCloud, 
+  Check,
+  FolderDown
+} from 'lucide-react';
 import { TransferProgress } from '../types';
 
 interface ClipboardTransferProps {
-  onStartTransfer: (meta: { transferId: string; totalChunks: number; totalBytes: number; totalLines: number; autoPaste: boolean }) => void;
+  onStartTransfer: (meta: {
+    transferId: string;
+    name?: string;
+    transferType?: 'text' | 'image' | 'file';
+    totalChunks: number;
+    totalBytes: number;
+    totalLines?: number;
+    autoPaste: boolean;
+    checksum?: number;
+  }) => void;
   onSendChunk: (chunk: { transferId: string; chunkIndex: number; data: string; checksum: number }) => void;
   onControlTransfer: (transferId: string, action: 'pause' | 'resume' | 'cancel') => void;
   activeProgress?: TransferProgress | null;
@@ -36,22 +59,60 @@ export const ClipboardTransfer: React.FC<ClipboardTransferProps> = ({
   activeProgress,
   ackChunkIndex
 }) => {
+  const [activeTab, setActiveTab] = useState<'image' | 'file' | 'text'>('image');
+  
+  // Text state
   const [content, setContent] = useState('');
+  
+  // Image state
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  // File state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Settings & state
   const [autoPaste, setAutoPaste] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [currentTransferId, setCurrentTransferId] = useState<string | null>(null);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
-  const [successStatus, setSuccessStatus] = useState(false);
+  const [successStatus, setSuccessStatus] = useState<string | null>(null);
 
   const chunksRef = useRef<string[]>([]);
   const nextChunkIndexRef = useRef<number>(0);
   const isPausedRef = useRef<boolean>(false);
   const isCancelledRef = useRef<boolean>(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const linesCount = content ? content.split(/\r\n|\r|\n/).length : 0;
   const charsCount = content.length;
   const bytesCount = new TextEncoder().encode(content).length;
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setErrorStatus(null);
+    setSuccessStatus(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorStatus('Please select a valid image file (PNG, JPG, WEBP, etc.)');
+      return;
+    }
+
+    setSelectedImage(file);
+    const url = URL.createObjectURL(file);
+    setImagePreview(url);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setErrorStatus(null);
+    setSuccessStatus(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+  };
 
   const handlePasteFromClipboard = async () => {
     try {
@@ -59,21 +120,79 @@ export const ClipboardTransfer: React.FC<ClipboardTransferProps> = ({
         const text = await navigator.clipboard.readText();
         if (text) {
           setContent(text);
-          setSuccessStatus(false);
+          setSuccessStatus(null);
         }
       } else {
         setErrorStatus("Clipboard API not available. Please paste manually into the box.");
       }
-    } catch (err: any) {
+    } catch {
       setErrorStatus("Could not read clipboard automatically. Please paste with long-press.");
     }
   };
 
-  const handleStartTransfer = () => {
-    if (!content.trim()) return;
+  const readFileAsBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.substring(result.indexOf(',') + 1);
+        resolve(base64);
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    });
+  };
 
+  const handleStartTransfer = async () => {
     setErrorStatus(null);
-    setSuccessStatus(false);
+    setSuccessStatus(null);
+
+    let rawPayload = '';
+    let transferType: 'text' | 'image' | 'file' = 'text';
+    let name = '';
+    let totalBytes = 0;
+    let totalLines = 0;
+
+    if (activeTab === 'image') {
+      if (!selectedImage) {
+        setErrorStatus('Please pick an image first');
+        return;
+      }
+      transferType = 'image';
+      name = selectedImage.name;
+      totalBytes = selectedImage.size;
+      try {
+        rawPayload = await readFileAsBase64(selectedImage);
+      } catch (err: any) {
+        setErrorStatus('Failed to read image file: ' + err.message);
+        return;
+      }
+    } else if (activeTab === 'file') {
+      if (!selectedFile) {
+        setErrorStatus('Please pick a file first');
+        return;
+      }
+      transferType = 'file';
+      name = selectedFile.name;
+      totalBytes = selectedFile.size;
+      try {
+        rawPayload = await readFileAsBase64(selectedFile);
+      } catch (err: any) {
+        setErrorStatus('Failed to read file: ' + err.message);
+        return;
+      }
+    } else {
+      if (!content.trim()) {
+        setErrorStatus('Please enter or paste text first');
+        return;
+      }
+      transferType = 'text';
+      name = `Clipboard Transfer (${linesCount} lines)`;
+      rawPayload = content;
+      totalBytes = bytesCount;
+      totalLines = linesCount;
+    }
+
     setIsSending(true);
     setIsPaused(false);
     isPausedRef.current = false;
@@ -82,26 +201,29 @@ export const ClipboardTransfer: React.FC<ClipboardTransferProps> = ({
     const transferId = 'xfer_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
     setCurrentTransferId(transferId);
 
-    // Split text into 16KB chunks (safe size for WebSocket frames)
+    // 16KB chunk size for optimal WebSocket frames
     const CHUNK_SIZE = 16384;
     const chunks: string[] = [];
-    for (let i = 0; i < content.length; i += CHUNK_SIZE) {
-      chunks.push(content.substring(i, i + CHUNK_SIZE));
+    for (let i = 0; i < rawPayload.length; i += CHUNK_SIZE) {
+      chunks.push(rawPayload.substring(i, i + CHUNK_SIZE));
     }
 
     chunksRef.current = chunks;
     nextChunkIndexRef.current = 0;
 
-    // Send transfer_start metadata
+    const fullChecksum = crc32(rawPayload);
+
     onStartTransfer({
       transferId,
+      name,
+      transferType,
       totalChunks: chunks.length,
-      totalBytes: bytesCount,
-      totalLines: linesCount,
-      autoPaste
+      totalBytes,
+      totalLines,
+      autoPaste,
+      checksum: fullChecksum
     });
 
-    // Send first chunk immediately
     sendNextChunk(transferId, 0);
   };
 
@@ -129,12 +251,15 @@ export const ClipboardTransfer: React.FC<ClipboardTransferProps> = ({
       nextChunkIndexRef.current = nextIndex;
 
       if (nextIndex < chunksRef.current.length) {
-        // Send next chunk
         sendNextChunk(currentTransferId, nextIndex);
       } else {
-        // Complete!
         setIsSending(false);
-        setSuccessStatus(true);
+        const targetDesc = activeTab === 'image' 
+          ? `Image "${selectedImage?.name}" transferred & pasted into PC!` 
+          : activeTab === 'file' 
+          ? `File "${selectedFile?.name}" transferred & pasted into PC!`
+          : `Text (${linesCount} lines) transferred & pasted into PC!`;
+        setSuccessStatus(targetDesc);
       }
     }
   }, [ackChunkIndex]);
@@ -167,102 +292,295 @@ export const ClipboardTransfer: React.FC<ClipboardTransferProps> = ({
   };
 
   return (
-    <div className="mobile-container">
-      <div className="instruction-banner" style={{ background: 'rgba(16, 185, 129, 0.08)', borderColor: 'rgba(16, 185, 129, 0.25)', color: '#34d399' }}>
-        <FileText size={18} />
-        <span>Paste large texts or code (<b>2,000–3,000+ lines</b>) below to transfer to your Windows PC with 100% accuracy.</span>
+    <div className="mobile-container" style={{ padding: '0.75rem', maxWidth: '540px', margin: '0 auto' }}>
+      {/* Tab Switcher: Image | File | Text */}
+      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.85rem', background: 'var(--bg-card)', padding: '0.35rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+        <button
+          type="button"
+          onClick={() => { setActiveTab('image'); setErrorStatus(null); setSuccessStatus(null); }}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.35rem',
+            padding: '0.55rem 0.25rem',
+            fontSize: '0.82rem',
+            fontWeight: activeTab === 'image' ? 700 : 500,
+            borderRadius: '8px',
+            border: 'none',
+            background: activeTab === 'image' ? 'var(--accent-cyan)' : 'transparent',
+            color: activeTab === 'image' ? '#0f172a' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <ImageIcon size={16} />
+          <span>Image / Photo</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveTab('file'); setErrorStatus(null); setSuccessStatus(null); }}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.35rem',
+            padding: '0.55rem 0.25rem',
+            fontSize: '0.82rem',
+            fontWeight: activeTab === 'file' ? 700 : 500,
+            borderRadius: '8px',
+            border: 'none',
+            background: activeTab === 'file' ? 'var(--accent-cyan)' : 'transparent',
+            color: activeTab === 'file' ? '#0f172a' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <FileUp size={16} />
+          <span>Any File</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveTab('text'); setErrorStatus(null); setSuccessStatus(null); }}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.35rem',
+            padding: '0.55rem 0.25rem',
+            fontSize: '0.82rem',
+            fontWeight: activeTab === 'text' ? 700 : 500,
+            borderRadius: '8px',
+            border: 'none',
+            background: activeTab === 'text' ? 'var(--accent-cyan)' : 'transparent',
+            color: activeTab === 'text' ? '#0f172a' : 'var(--text-secondary)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <FileText size={16} />
+          <span>3k+ Lines Text</span>
+        </button>
       </div>
 
-      <div className="text-input-wrapper">
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Paste large text or clipboard content here (2,000–3,000+ lines supported)..."
-          className="mobile-textarea"
-          disabled={isSending}
-          style={{ minHeight: '200px' }}
-        />
+      {/* Hidden File Inputs */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageSelect}
+        style={{ display: 'none' }}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="*/*"
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+      />
 
-        <div className="voice-indicator-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span><b>{linesCount.toLocaleString()}</b> lines</span>
-            <span>•</span>
-            <span><b>{charsCount.toLocaleString()}</b> chars</span>
-            <span>•</span>
-            <span><b>{(bytesCount / 1024).toFixed(1)}</b> KB</span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handlePasteFromClipboard}
-            className="btn btn-secondary"
-            style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+      {/* Content for IMAGE TAB */}
+      {activeTab === 'image' && (
+        <div>
+          <div 
+            onClick={() => imageInputRef.current?.click()}
+            style={{
+              border: '2px dashed var(--border-color)',
+              borderRadius: '14px',
+              padding: '1.25rem 1rem',
+              textAlign: 'center',
+              cursor: 'pointer',
+              background: 'rgba(255, 255, 255, 0.02)',
+              marginBottom: '0.85rem',
+              transition: 'all 0.2s'
+            }}
           >
-            <Copy size={12} />
-            <span>Paste from Phone</span>
-          </button>
+            {imagePreview ? (
+              <div>
+                <img 
+                  src={imagePreview} 
+                  alt="Preview" 
+                  style={{ maxWidth: '100%', maxHeight: '180px', borderRadius: '8px', objectFit: 'contain' }} 
+                />
+                <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
+                  {selectedImage?.name} ({(selectedImage!.size / 1024).toFixed(1)} KB)
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Tap to pick another image</div>
+              </div>
+            ) : (
+              <div>
+                <UploadCloud size={40} style={{ color: 'var(--accent-cyan)', margin: '0 auto 0.5rem' }} />
+                <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Choose Image or Screenshot
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                  PNG, JPG, WEBP, GIF • Automatically pastes as bitmap into PC apps
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Content for ANY FILE TAB */}
+      {activeTab === 'file' && (
+        <div>
+          <div 
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              border: '2px dashed var(--border-color)',
+              borderRadius: '14px',
+              padding: '1.25rem 1rem',
+              textAlign: 'center',
+              cursor: 'pointer',
+              background: 'rgba(255, 255, 255, 0.02)',
+              marginBottom: '0.85rem'
+            }}
+          >
+            {selectedFile ? (
+              <div>
+                <FileUp size={36} style={{ color: 'var(--accent-cyan)', margin: '0 auto 0.5rem' }} />
+                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
+                  {selectedFile.name}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                  {(selectedFile.size / 1024).toFixed(1)} KB • Tap to change file
+                </div>
+              </div>
+            ) : (
+              <div>
+                <FolderDown size={40} style={{ color: 'var(--accent-cyan)', margin: '0 auto 0.5rem' }} />
+                <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Choose Any File to Send to PC
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                  PDF, ZIP, DOCX, APK, code, etc. • Saved to Downloads/VoiceBridge/
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Content for TEXT TAB */}
+      {activeTab === 'text' && (
+        <div>
+          <div className="text-input-wrapper">
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Paste large code or text (2,000–3,000+ lines supported)..."
+              className="mobile-textarea"
+              disabled={isSending}
+              style={{ minHeight: '160px' }}
+            />
+
+            <div className="voice-indicator-bar">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem' }}>
+                <span><b>{linesCount.toLocaleString()}</b> lines</span>
+                <span>•</span>
+                <span><b>{charsCount.toLocaleString()}</b> chars</span>
+                <span>•</span>
+                <span><b>{(bytesCount / 1024).toFixed(1)}</b> KB</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePasteFromClipboard}
+                className="btn btn-secondary"
+                style={{ padding: '3px 8px', fontSize: '0.75rem' }}
+              >
+                <Copy size={12} />
+                <span>Paste from Phone</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Progress Bar Display */}
-      {isSending && activeProgress && (
-        <div style={{ marginTop: '1rem', background: 'var(--bg-card)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
-            <span>Transferring: <b>{activeProgress.percent}%</b></span>
-            <span>Chunk {activeProgress.receivedChunks} of {activeProgress.totalChunks}</span>
+      {isSending && (
+        <div style={{ marginTop: '0.85rem', background: 'var(--bg-card)', padding: '0.85rem', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', fontSize: '0.85rem' }}>
+            <span>Sending to PC: <b>{activeProgress ? activeProgress.percent : Math.round((nextChunkIndexRef.current / (chunksRef.current.length || 1)) * 100)}%</b></span>
+            <span>Chunk {nextChunkIndexRef.current} of {chunksRef.current.length}</span>
           </div>
 
           <div style={{ width: '100%', height: '8px', background: 'var(--bg-input)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ width: `${activeProgress.percent}%`, height: '100%', background: 'var(--accent-cyan)', transition: 'width 0.2s' }} />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            <span>{(activeProgress.receivedBytes / 1024).toFixed(1)} KB / {(activeProgress.totalBytes / 1024).toFixed(1)} KB</span>
-            <span>{activeProgress.totalLines.toLocaleString()} lines</span>
+            <div 
+              style={{ 
+                width: `${activeProgress ? activeProgress.percent : Math.round((nextChunkIndexRef.current / (chunksRef.current.length || 1)) * 100)}%`, 
+                height: '100%', 
+                background: 'var(--accent-cyan)', 
+                transition: 'width 0.2s' 
+              }} 
+            />
           </div>
         </div>
       )}
 
+      {/* Success Notification */}
       {successStatus && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-green)', background: 'rgba(16, 185, 129, 0.1)', padding: '0.75rem', borderRadius: '8px', marginTop: '1rem', fontSize: '0.9rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981', background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '0.75rem', borderRadius: '10px', marginTop: '0.75rem', fontSize: '0.85rem' }}>
           <CheckCircle2 size={18} />
-          <span>Transferred {linesCount.toLocaleString()} lines successfully to Windows PC!</span>
+          <div>
+            <div style={{ fontWeight: 600 }}>{successStatus}</div>
+            <div style={{ fontSize: '0.74rem', color: '#6ee7b7', marginTop: '0.15rem' }}>
+              Saved in PC <code>Downloads/VoiceBridge/</code> & ready on clipboard!
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Error Notification */}
       {errorStatus && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-red)', background: 'rgba(239, 68, 68, 0.1)', padding: '0.75rem', borderRadius: '8px', marginTop: '1rem', fontSize: '0.85rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent-red)', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '0.75rem', borderRadius: '10px', marginTop: '0.75rem', fontSize: '0.85rem' }}>
           <AlertCircle size={18} />
           <span>{errorStatus}</span>
         </div>
       )}
 
-      {/* Settings & Options */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '1rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+      {/* Auto-Paste Setting Toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.85rem 0', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
         <input
           type="checkbox"
           id="autoPasteCheck"
           checked={autoPaste}
           onChange={(e) => setAutoPaste(e.target.checked)}
-          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+          style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: 'var(--accent-cyan)' }}
         />
         <label htmlFor="autoPasteCheck" style={{ cursor: 'pointer' }}>
-          Auto-paste directly into active PC cursor (Ctrl+V) upon transfer
+          Auto-paste on PC (Ctrl+V) directly into active input / window
         </label>
       </div>
 
-      {/* Control Buttons */}
-      <div style={{ display: 'flex', gap: '0.75rem' }}>
+      {/* Transfer Action Buttons */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
         {!isSending ? (
           <button
             type="button"
             onClick={handleStartTransfer}
             className="btn btn-primary"
-            style={{ flex: 1, padding: '0.85rem' }}
-            disabled={!content.trim()}
+            style={{ flex: 1, padding: '0.75rem' }}
+            disabled={
+              (activeTab === 'image' && !selectedImage) ||
+              (activeTab === 'file' && !selectedFile) ||
+              (activeTab === 'text' && !content.trim())
+            }
           >
-            <Send size={18} />
-            <span>Transfer to PC ({linesCount.toLocaleString()} lines)</span>
+            <Send size={16} />
+            <span>
+              {activeTab === 'image' 
+                ? 'Send & Paste Image on PC' 
+                : activeTab === 'file' 
+                ? 'Send & Paste File on PC' 
+                : `Send & Paste Text (${linesCount} lines)`}
+            </span>
           </button>
         ) : (
           <>
@@ -288,4 +606,3 @@ export const ClipboardTransfer: React.FC<ClipboardTransferProps> = ({
     </div>
   );
 };
-

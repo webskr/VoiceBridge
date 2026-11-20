@@ -1,7 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Monitor, Smartphone, Pause, Play, Trash2, LogOut, Activity, Info, Copy, FileText, Check, Power, Clock, CheckCircle2, QrCode, Mic } from 'lucide-react';
-import { ConnectionBadge } from './ConnectionBadge';
-import { ConnectionState, TransferProgress, HistoryItem } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Activity,
+  Mic,
+  QrCode,
+  Smartphone,
+  Copy,
+  Check,
+  CheckCircle2,
+  Trash2,
+  FileText,
+  X,
+  ExternalLink,
+  ShieldCheck,
+  Image as ImageIcon
+} from 'lucide-react';
+import { ConnectionState, StreamAttachment } from '../types';
 
 interface PcCompanionProps {
   liveText: string;
@@ -9,18 +22,19 @@ interface PcCompanionProps {
   deviceInfo: string;
   connectionState: ConnectionState;
   isPaused: boolean;
-  activeTransfer: TransferProgress | null;
-  history: HistoryItem[];
-  startupEnabled: boolean;
-  pin?: string;
-  pairingUrl?: string;
-  onPause: () => void;
-  onResume: () => void;
+  pin: string;
+  pairingUrl: string;
+  streamAttachments: StreamAttachment[];
+  onRemoveAttachment: (id: string) => void;
   onClear: () => void;
-  onDisconnect: () => void;
-  onToggleStartup: (enabled: boolean) => void;
-  onCopyHistory: (id: string) => Promise<boolean>;
-  onInjectHistory: (id: string, delay?: number) => Promise<boolean>;
+}
+
+function formatBytes(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 export const PcCompanion: React.FC<PcCompanionProps> = ({
@@ -29,358 +43,310 @@ export const PcCompanion: React.FC<PcCompanionProps> = ({
   deviceInfo,
   connectionState,
   isPaused,
-  activeTransfer,
-  history,
-  startupEnabled,
   pin,
   pairingUrl,
-  onPause,
-  onResume,
-  onClear,
-  onDisconnect,
-  onToggleStartup,
-  onCopyHistory,
-  onInjectHistory
+  streamAttachments,
+  onRemoveAttachment,
+  onClear
 }) => {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [injectingId, setInjectingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'mirror' | 'history'>('mirror');
+  const [liveCopied, setLiveCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [liveCountdown, setLiveCountdown] = useState<number | null>(null);
+  const [previewModalUrl, setPreviewModalUrl] = useState<string | null>(null);
 
-  const wordCount = liveText.trim() ? liveText.trim().split(/\s+/).length : 0;
+  const streamBoxRef = useRef<HTMLDivElement>(null);
+  const streamTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const isUserScrolledUpRef = useRef(false);
 
-  const handleCopy = async (id: string) => {
-    const success = await onCopyHistory(id);
-    if (success) {
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
+  const handleStreamScroll = () => {
+    const el = streamBoxRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isUserScrolledUpRef.current = distFromBottom > 35;
+  };
+
+  // Keep textarea expanded so stream-box-container does ALL scrolling (chips + text together)
+  useEffect(() => {
+    if (streamTextareaRef.current) {
+      streamTextareaRef.current.style.height = 'auto';
+      streamTextareaRef.current.style.height = `${Math.max(120, streamTextareaRef.current.scrollHeight)}px`;
+    }
+    if (!isUserScrolledUpRef.current && streamBoxRef.current) {
+      streamBoxRef.current.scrollTop = streamBoxRef.current.scrollHeight;
+    }
+  }, [liveText, streamAttachments]);
+
+  // Copy plain text only from stream
+  const handleCopyLive = async () => {
+    if (!liveText) return;
+    try {
+      await navigator.clipboard.writeText(liveText);
+      setLiveCopied(true);
+      setTimeout(() => setLiveCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy stream text:', err);
     }
   };
 
-  const handleInject = async (id: string) => {
-    setInjectingId(id);
-    // 2 second delay to let user switch focus to Notepad or another window
-    await onInjectHistory(id, 2);
-    setTimeout(() => setInjectingId(null), 2500);
+  // Inject stream text into active cursor with 2-second countdown
+  const handleInjectLive = async (delaySec: number = 2) => {
+    if (!liveText || liveCountdown !== null) return;
+    setLiveCountdown(delaySec);
+    try {
+      await fetch('/api/paste', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: liveText, delay: delaySec })
+      });
+    } catch (err) {
+      console.error('Failed to inject text:', err);
+    }
+
+    let rem = delaySec;
+    const interval = setInterval(() => {
+      rem--;
+      if (rem <= 0) {
+        clearInterval(interval);
+        setLiveCountdown(null);
+      } else {
+        setLiveCountdown(rem);
+      }
+    }, 1000);
   };
 
+  const handleCopyUrl = async () => {
+    if (!pairingUrl) return;
+    try {
+      await navigator.clipboard.writeText(pairingUrl);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2000);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const wordCount = liveText.trim() ? liveText.trim().split(/\s+/).length : 0;
+
   return (
-    <div className="companion-container">
-      {/* Top Header Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <Monitor className="brand-icon" size={28} />
-            <span>VoiceBridge PC Dashboard</span>
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-            Live text transfer, 3,000+ line clipboard engine & cursor injection
-          </p>
+    <div className="companion-full-viewport">
+      {/* LEFT COLUMN: Live Voice Typing Stream card (70%) */}
+      <section className="companion-left-column">
+        {/* Stream Header */}
+        <div className="stream-header-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <Activity size={18} color="var(--accent-cyan)" />
+            <span style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-primary)' }}>
+              Live Voice Typing Stream
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Revision #{revision}
+            </span>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <ConnectionBadge state={connectionState} />
-          {isPaused ? (
-            <button onClick={onResume} className="btn btn-warning" style={{ padding: '0.5rem 1rem' }}>
-              <Play size={16} />
-              <span>Resume Injection</span>
+        {/* Live Stream Box: Single unified scroll container for chips + text */}
+        <div className="stream-box-container" ref={streamBoxRef} onScroll={handleStreamScroll}>
+          {/* Chat-style Attachment Chips */}
+          {streamAttachments.length > 0 && (
+            <div className="stream-chips-container">
+              {streamAttachments.map((item) => (
+                <div key={item.id} className="stream-chip">
+                  {item.type === 'image' ? (
+                    item.url ? (
+                      <img
+                        src={item.url}
+                        alt={item.name}
+                        className="stream-chip-img-thumb"
+                        title="Click to enlarge"
+                        onClick={() => setPreviewModalUrl(item.url || null)}
+                      />
+                    ) : (
+                      <ImageIcon size={22} color="var(--accent-cyan)" style={{ flexShrink: 0 }} />
+                    )
+                  ) : (
+                    <FileText size={20} color="var(--accent-cyan)" style={{ flexShrink: 0 }} />
+                  )}
+
+                  <div className="stream-chip-info">
+                    <span className="stream-chip-name" title={item.name}>
+                      {item.name}
+                    </span>
+                    <span className="stream-chip-status">
+                      {formatBytes(item.size)} •{' '}
+                      {item.status === 'receiving' ? (
+                        <span style={{ color: 'var(--accent-cyan)' }}>
+                          Receiving {item.progress || 0}%
+                        </span>
+                      ) : item.status === 'saved' ? (
+                        <span style={{ color: 'var(--accent-green)' }}>Saved on PC</span>
+                      ) : (
+                        <span style={{ color: 'var(--accent-red)' }}>Failed</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onRemoveAttachment(item.id)}
+                    className="stream-chip-close"
+                    title="Remove attachment"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Text Area for Live Typing: auto-expands, never scrolls internally */}
+          <textarea
+            ref={streamTextareaRef}
+            className="stream-live-textarea"
+            value={liveText}
+            readOnly
+            placeholder="Waiting for phone input... Words spoken on mobile or typed on virtual keyboard will stream here live and inject directly into your active PC cursor!"
+          />
+        </div>
+
+        {/* Stream Actions & Info Bar */}
+        <div className="stream-action-bar">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'center' }}>
+            <button
+              onClick={handleCopyLive}
+              disabled={!liveText}
+              className="btn btn-secondary"
+              style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem' }}
+            >
+              {liveCopied ? <Check size={15} color="var(--accent-green)" /> : <Copy size={15} />}
+              <span>{liveCopied ? 'Copied Text!' : 'Copy Stream Text'}</span>
             </button>
-          ) : (
-            <button onClick={onPause} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}>
-              <Pause size={16} />
-              <span>Pause Injection</span>
+
+            <button
+              onClick={() => handleInjectLive(2)}
+              disabled={!liveText || liveCountdown !== null}
+              className="btn btn-primary"
+              style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem' }}
+            >
+              <CheckCircle2 size={15} />
+              <span>
+                {liveCountdown !== null
+                  ? `Click target input box now... (${liveCountdown}s)`
+                  : 'Paste into Active Window (Ctrl+V)'}
+              </span>
             </button>
+
+            <button
+              onClick={onClear}
+              disabled={!liveText && streamAttachments.length === 0}
+              className="btn btn-secondary"
+              style={{ padding: '0.45rem 0.9rem', fontSize: '0.85rem' }}
+            >
+              <Trash2 size={15} />
+              <span>Clear</span>
+            </button>
+          </div>
+
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            {liveText.length} characters • {wordCount} words
+          </div>
+        </div>
+      </section>
+
+      {/* RIGHT COLUMN: Direct Voice & Pairing Cards (30%) */}
+      <aside className="companion-right-column">
+        {/* Direct PC Voice Dictation Card */}
+        <div className="compact-side-card" style={{ border: '1px solid rgba(56, 189, 248, 0.4)', background: 'linear-gradient(135deg, rgba(19, 27, 46, 0.95), rgba(56, 189, 248, 0.08))' }}>
+          <h3 className="side-card-title">
+            <Mic size={17} color="var(--accent-cyan)" />
+            <span>PC Direct Voice (Zero Phone)</span>
+          </h3>
+
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+            Press global hotkey anywhere to speak & direct-type into cursor:
+            <div style={{ marginTop: '0.4rem', background: 'var(--bg-input)', padding: '0.45rem 0.65rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Global Hotkey:</span>
+              <kbd style={{ background: 'var(--accent-cyan)', color: '#090d16', padding: '0.2rem 0.55rem', borderRadius: '4px', fontWeight: 700, fontSize: '0.8rem' }}>Ctrl + Alt + V</kbd>
+            </div>
+          </div>
+
+          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: '1.45', marginTop: '0.35rem' }}>
+            • Works in VS Code, Notepad, Browser, Antigravity<br />
+            • Supports Hindi, Hinglish & English mixed speech
+          </div>
+        </div>
+
+        {/* Scan to Connect Phone Card */}
+        <div className="compact-side-card" style={{ textAlign: 'center' }}>
+          <h3 className="side-card-title" style={{ justifyContent: 'center' }}>
+            <QrCode size={17} color="var(--accent-cyan)" />
+            <span>Scan to Connect Phone</span>
+          </h3>
+
+          <div style={{ background: '#ffffff', padding: '8px', borderRadius: '10px', display: 'inline-block', margin: '0.45rem auto 0.35rem' }}>
+            <img src="/qr" alt="Pairing QR Code" style={{ width: '130px', height: '130px', display: 'block' }} />
+          </div>
+
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+            PIN: <b style={{ color: 'var(--accent-cyan)', fontSize: '1.15rem', letterSpacing: '2.5px', marginLeft: '4px' }}>{pin || 'J5R3AC'}</b>
+          </div>
+
+          {pairingUrl && (
+            <div style={{ marginTop: '0.45rem' }}>
+              <button
+                type="button"
+                onClick={handleCopyUrl}
+                className="btn btn-secondary"
+                style={{ padding: '0.35rem 0.65rem', fontSize: '0.75rem', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+              >
+                {copiedUrl ? <Check size={13} color="var(--accent-green)" /> : <Copy size={13} />}
+                <span>{copiedUrl ? 'Copied URL!' : 'Copy Mobile URL'}</span>
+              </button>
+            </div>
           )}
         </div>
-      </div>
 
-      {/* Active Transfer Banner (if chunked transfer in progress) */}
-      {activeTransfer && activeTransfer.status !== 'completed' && (
-        <div style={{ marginTop: '1.25rem', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '1rem 1.25rem', borderRadius: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
-              <FileText size={18} />
-              <span>Receiving Large Clipboard Transfer ({activeTransfer.totalLines.toLocaleString()} lines)</span>
-            </div>
-            <span style={{ fontWeight: 700, color: 'var(--accent-cyan)', fontSize: '1.1rem' }}>{activeTransfer.percent}%</span>
+        {/* System & Connection Status Card */}
+        <div className="compact-side-card">
+          <h3 className="side-card-title">
+            <ShieldCheck size={17} color="var(--accent-cyan)" />
+            <span>Connection & Status</span>
+          </h3>
+
+          <div className="compact-stat-row">
+            <span style={{ color: 'var(--text-secondary)' }}>Phone:</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.3rem', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Smartphone size={13} color="var(--accent-cyan)" />
+              {deviceInfo || 'Waiting for pairing...'}
+            </span>
           </div>
 
-          <div style={{ width: '100%', height: '8px', background: 'var(--bg-input)', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ width: `${activeTransfer.percent}%`, height: '100%', background: 'var(--accent-cyan)', transition: 'width 0.2s' }} />
+          <div className="compact-stat-row">
+            <span style={{ color: 'var(--text-secondary)' }}>Injection:</span>
+            <span style={{ fontWeight: 600, color: isPaused ? 'var(--accent-amber)' : 'var(--accent-green)' }}>
+              {isPaused ? 'Paused' : 'Active (Direct Cursor)'}
+            </span>
           </div>
+        </div>
+      </aside>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            <span>{(activeTransfer.receivedBytes / 1024).toFixed(1)} KB / {(activeTransfer.totalBytes / 1024).toFixed(1)} KB</span>
-            <span>Chunk {activeTransfer.receivedChunks} of {activeTransfer.totalChunks}</span>
-            <span>{activeTransfer.autoPaste ? 'Auto-Pasting (Ctrl+V)' : 'Clipboard Only'}</span>
+      {/* Enlarged Image Lightbox Modal */}
+      {previewModalUrl && (
+        <div className="image-modal-overlay" onClick={() => setPreviewModalUrl(null)}>
+          <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="image-modal-close"
+              onClick={() => setPreviewModalUrl(null)}
+              title="Close preview"
+            >
+              <X size={18} />
+            </button>
+            <img src={previewModalUrl} alt="Preview" />
           </div>
         </div>
       )}
-
-      {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '1rem', marginTop: '1.25rem', borderBottom: '1px solid var(--border-color)' }}>
-        <button
-          onClick={() => setActiveTab('mirror')}
-          style={{
-            background: 'none',
-            border: 'none',
-            borderBottom: activeTab === 'mirror' ? '2px solid var(--accent-cyan)' : '2px solid transparent',
-            color: activeTab === 'mirror' ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-            fontWeight: 600,
-            padding: '0.65rem 1rem',
-            cursor: 'pointer',
-            fontSize: '0.95rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.45rem'
-          }}
-        >
-          <Activity size={16} />
-          <span>Live Mirror</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('history')}
-          style={{
-            background: 'none',
-            border: 'none',
-            borderBottom: activeTab === 'history' ? '2px solid var(--accent-cyan)' : '2px solid transparent',
-            color: activeTab === 'history' ? 'var(--accent-cyan)' : 'var(--text-secondary)',
-            fontWeight: 600,
-            padding: '0.65rem 1rem',
-            cursor: 'pointer',
-            fontSize: '0.95rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.45rem'
-          }}
-        >
-          <Clock size={16} />
-          <span>Transfer History ({history.length})</span>
-        </button>
-      </div>
-
-      <div className="companion-grid">
-        {/* Main Content Area */}
-        {activeTab === 'mirror' ? (
-          <div className="mirror-panel">
-            <div className="mirror-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                <Activity size={16} color="var(--accent-cyan)" />
-                <span>Live Voice Typing Stream</span>
-              </div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                Revision #{revision}
-              </div>
-            </div>
-
-            <div className="live-mirror-text">
-              {liveText ? (
-                <>
-                  {liveText}
-                  <span className="blinking-cursor" />
-                </>
-              ) : (
-                <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                  Waiting for phone input... Words spoken on mobile or pasted will appear live in your active PC cursor!
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '1rem', marginTop: '1rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                {liveText.length} characters • {wordCount} words
-              </span>
-              <button onClick={onClear} className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}>
-                <Trash2 size={14} />
-                <span>Clear</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="mirror-panel">
-            <div className="mirror-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                <FileText size={16} color="var(--accent-cyan)" />
-                <span>Recent Transfers ({history.length})</span>
-              </div>
-            </div>
-
-            {history.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-muted)', gap: '0.75rem' }}>
-                <FileText size={32} />
-                <p>No transfers yet. Paste 2,000–3,000+ lines from mobile to see them here.</p>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', overflowY: 'auto', maxHeight: '500px' }}>
-                {history.map((item) => (
-                  <div key={item.id} style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
-                        {item.totalLines.toLocaleString()} lines • {(item.totalBytes / 1024).toFixed(1)} KB
-                      </span>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {item.timeFormatted}
-                      </span>
-                    </div>
-
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '0.5rem', borderRadius: '6px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: '70px', overflow: 'hidden' }}>
-                      {item.preview}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
-                      <button
-                        onClick={() => handleCopy(item.id)}
-                        className="btn btn-secondary"
-                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                      >
-                        {copiedId === item.id ? <Check size={14} color="var(--accent-green)" /> : <Copy size={14} />}
-                        <span>{copiedId === item.id ? 'Copied!' : 'Copy to PC Clipboard'}</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleInject(item.id)}
-                        className="btn btn-primary"
-                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }}
-                        disabled={injectingId === item.id}
-                      >
-                        <CheckCircle2 size={14} />
-                        <span>{injectingId === item.id ? 'Pasting in 2s (focus window!)...' : 'Paste into Active Window'}</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Sidebar Status & Diagnostics */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          {/* Direct PC Voice Dictation Card */}
-          <div className="stats-card" style={{ border: '1px solid rgba(56, 189, 248, 0.4)', background: 'linear-gradient(135deg, rgba(19, 27, 46, 0.95), rgba(56, 189, 248, 0.08))' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-              <Mic size={18} color="var(--accent-cyan)" />
-              <span>PC Direct Voice (Zero Phone)</span>
-            </h3>
-
-            <div style={{ margin: '0.75rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Press the global Windows shortcut anywhere to speak and type:
-              <div style={{ marginTop: '0.5rem', background: 'var(--bg-input)', padding: '0.5rem', borderRadius: '8px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Global Hotkey:</span>
-                <kbd style={{ background: 'var(--accent-cyan)', color: '#090d16', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 700, fontSize: '0.85rem' }}>Ctrl + Alt + V</kbd>
-              </div>
-            </div>
-
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: '1.5' }}>
-              • Works in VS Code, Antigravity, Notepad, Browser<br />
-              • Hindi, Hinglish & English mixed speech supported<br />
-              • Browser open hona bilkul zaroori nahi hai
-            </div>
-
-            <div style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--accent-cyan)', fontFamily: 'monospace' }}>
-              Command: npm run pc-voice
-            </div>
-          </div>
-
-          {/* QR Code Pairing Scanner Card */}
-          <div className="stats-card" style={{ textAlign: 'center' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem' }}>
-              <QrCode size={18} color="var(--accent-cyan)" />
-              <span>Scan to Connect Phone</span>
-            </h3>
-
-            <div style={{ background: '#ffffff', padding: '10px', borderRadius: '12px', display: 'inline-block', margin: '0.75rem auto 0.5rem' }}>
-              <img src="/qr" alt="Pairing QR Code" style={{ width: '170px', height: '170px', display: 'block' }} />
-            </div>
-
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              PIN: <b style={{ color: 'var(--accent-cyan)', fontSize: '1.25rem', letterSpacing: '3px', marginLeft: '4px' }}>{pin || 'J5R3AC'}</b>
-            </div>
-
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-              Point your phone's camera at this QR code to connect instantly.
-            </p>
-
-            {pairingUrl && (
-              <div style={{ marginTop: '0.65rem' }}>
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard.writeText(pairingUrl)}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', width: '100%' }}
-                >
-                  <Copy size={12} />
-                  <span>Copy Mobile URL</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="stats-card">
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-              Connection & System
-            </h3>
-
-            <div className="stat-item">
-              <span className="stat-label">Connected Phone:</span>
-              <span className="stat-value" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                <Smartphone size={14} color="var(--accent-cyan)" />
-                {deviceInfo || 'Waiting for pairing...'}
-              </span>
-            </div>
-
-            <div className="stat-item">
-              <span className="stat-label">Windows Injection:</span>
-              <span className="stat-value" style={{ color: isPaused ? 'var(--accent-amber)' : 'var(--accent-green)' }}>
-                {isPaused ? 'Paused' : 'Active (SendInput + Clipboard)'}
-              </span>
-            </div>
-
-            <div className="stat-item">
-              <span className="stat-label">Target Applications:</span>
-              <span className="stat-value">Notepad, VS Code, Chrome, etc.</span>
-            </div>
-
-            <div className="stat-item">
-              <span className="stat-label">Languages Supported:</span>
-              <span className="stat-value">English & Hindi Unicode</span>
-            </div>
-
-            {/* Windows Startup Toggle */}
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className="stat-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Power size={14} />
-                  <span>Start with Windows:</span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={startupEnabled}
-                  onChange={(e) => onToggleStartup(e.target.checked)}
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                />
-              </div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
-                Automatically launches VoiceBridge Agent on PC boot.
-              </span>
-            </div>
-
-            <button onClick={onDisconnect} className="btn btn-danger" style={{ width: '100%', marginTop: '0.5rem' }}>
-              <LogOut size={16} />
-              <span>Disconnect Phone</span>
-            </button>
-          </div>
-
-          <div className="callout-box">
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-              <Info size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <b>Cursor Injection:</b> Select any text area in <b>Notepad</b>, <b>VS Code</b>, or <b>WhatsApp Desktop</b>. VoiceBridge automatically types or pastes into the active cursor without stealing focus.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
